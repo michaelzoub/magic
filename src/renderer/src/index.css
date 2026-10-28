@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --chrome-bg: 246 246 247;
+  --chrome-panel: 255 255 255;
+  --chrome-hover: 0 0 0;
+  --chrome-active: 255 255 255;
+  --chrome-border: 0 0 0;
+  --chrome-text: 28 29 31;
+  --chrome-muted: 107 111 118;
+  --chrome-faint: 160 163 170;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chrome-bg: 22 23 25;
+    --chrome-panel: 15 16 17;
+    --chrome-hover: 255 255 255;
+    --chrome-active: 40 41 45;
+    --chrome-border: 255 255 255;
+    --chrome-text: 230 231 234;
+    --chrome-muted: 140 143 150;
+    --chrome-faint: 95 98 105;
+  }
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-chrome-bg/90 font-sans text-sm text-chrome-text antialiased select-none overflow-hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
