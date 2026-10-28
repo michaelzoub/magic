@@ -16,6 +16,7 @@ const engine: BrowserEngine = {
   goForward: call('goForward'),
   reload: call('reload'),
   stop: call('stop'),
+  preconnect: (input) => ipcRenderer.send(IPC.preconnect, input),
   setViewportBounds: (b) => ipcRenderer.send(IPC.bounds, b),
   subscribe: (listener) => {
     const handler = (_: unknown, s: EngineSnapshot) => listener(s)

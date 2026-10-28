@@ -1,4 +1,5 @@
 import { Workspaces } from './icons'
+import { motion } from '@/motion'
 
 export function Sidebar() {
   return (
@@ -7,6 +8,7 @@ export function Sidebar() {
         type="button"
         title="Workspaces"
         aria-label="Workspaces"
+        onClick={(e) => motion.press(e.currentTarget)}
         className="no-drag grid h-8 w-8 place-items-center rounded-lg text-chrome-muted transition-colors
           hover:bg-chrome-hover/[0.06] hover:text-chrome-text"
       >

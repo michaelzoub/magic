@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { TabState } from '@shared/engine'
 import { engine } from '@/engine'
+import { motion } from '@/motion'
 
 /**
  * Reserves the page area. The engine renders the native page surface over
@@ -35,7 +36,7 @@ export function Viewport({ tab }: { tab: TabState | null }) {
       className="relative flex-1 overflow-hidden rounded-lg bg-chrome-panel shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.1),0_1px_3px_rgb(0_0_0/0.05)]"
     >
       {!tab?.url && (
-        <div className="absolute inset-0 grid place-items-center">
+        <div ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.fadeIn(el, 0.05) } }} className="absolute inset-0 grid place-items-center">
           <p className="text-xs text-chrome-faint">Enter an address to begin</p>
         </div>
       )}

@@ -17,7 +17,7 @@ export function createMemoryEngine(): BrowserEngine {
     subscribe: (l) => (listeners.add(l), () => listeners.delete(l)),
     async createTab(url) {
       const id = crypto.randomUUID()
-      const tab: TabState = { id, url: '', title: 'New Tab', isLoading: false, canGoBack: false, canGoForward: false }
+      const tab: TabState = { id, url: '', title: 'New Tab', isLoading: false, canGoBack: false, canGoForward: false, isDiscarded: false }
       set({ tabs: [...snap.tabs, tab], activeTabId: id })
       if (url) await engine.navigate(id, url)
       return id
@@ -38,6 +38,7 @@ export function createMemoryEngine(): BrowserEngine {
     goForward: noop,
     reload: noop,
     stop: noop,
+    preconnect: () => {},
     setViewportBounds: () => {}
   }
   void engine.createTab()

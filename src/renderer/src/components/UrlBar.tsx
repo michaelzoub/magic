@@ -4,14 +4,16 @@ import { Lock, Search } from './icons'
 interface Props {
   url: string
   onSubmit(input: string): void
+  onPreconnect(input: string): void
 }
 
 const display = (url: string) => url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
-export function UrlBar({ url, onSubmit }: Props) {
+export function UrlBar({ url, onSubmit, onPreconnect }: Props) {
   const [value, setValue] = useState(url)
   const [focused, setFocused] = useState(false)
   const ref = useRef<HTMLInputElement>(null)
+  const preconnectTimer = useRef<number>(0)
 
   useEffect(() => {
     if (!focused) setValue(url)
@@ -46,15 +48,21 @@ export function UrlBar({ url, onSubmit }: Props) {
       <input
         ref={ref}
         value={focused ? value : display(value)}
-        onChange={(e) => setValue(e.target.value)}
+        onInput={(e) => {
+          const next = e.currentTarget.value
+          setValue(next)
+          clearTimeout(preconnectTimer.current)
+          preconnectTimer.current = window.setTimeout(() => onPreconnect(next), 250)
+        }}
         onFocus={(e) => {
           setFocused(true)
-          requestAnimationFrame(() => e.target.select())
+          const input = e.currentTarget
+          requestAnimationFrame(() => input.select())
         }}
         onBlur={() => setFocused(false)}
         onKeyDown={(e) => e.key === 'Escape' && (setValue(url), ref.current?.blur())}
         placeholder="Search or enter address"
-        spellCheck={false}
+        spellcheck={false}
         className="min-w-0 flex-1 bg-transparent text-xs text-chrome-text outline-none placeholder:text-chrome-faint"
       />
     </form>

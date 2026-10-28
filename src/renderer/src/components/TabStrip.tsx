@@ -1,4 +1,5 @@
 import type { TabState } from '@shared/engine'
+import { motion } from '@/motion'
 import { Close, Globe, Plus } from './icons'
 import { IconButton } from './IconButton'
 
@@ -18,6 +19,7 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: Props)
         return (
           <div
             key={tab.id}
+            ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.tabIn(el) } }}
             role="tab"
             aria-selected={active}
             onMouseDown={() => onSelect(tab.id)}
@@ -25,7 +27,7 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: Props)
             className={`no-drag group relative flex h-7 min-w-0 max-w-[200px] flex-1 basis-0 items-center gap-2 rounded-md pl-2 pr-1 text-xs transition-colors duration-100
               ${active
                 ? 'bg-chrome-active text-chrome-text shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.1),0_1px_2px_rgb(0_0_0/0.06)]'
-                : 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text'}`}
+                : 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text'} ${tab.isDiscarded ? 'opacity-60' : ''}`}
           >
             {tab.favicon ? (
               <img src={tab.favicon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-sm" />
@@ -46,7 +48,7 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: Props)
           </div>
         )
       })}
-      <IconButton aria-label="New tab" title="New tab (⌘T)" onClick={onNew} className="shrink-0">
+      <IconButton aria-label="New tab" title="New tab (⌘T)" onClick={(e) => (motion.press(e.currentTarget), onNew())} className="shrink-0">
         <Plus className="h-3.5 w-3.5" />
       </IconButton>
     </div>

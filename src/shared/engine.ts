@@ -16,6 +16,8 @@ export interface TabState {
   isLoading: boolean
   canGoBack: boolean
   canGoForward: boolean
+  /** Unloaded to save memory; reloads transparently when activated. */
+  isDiscarded: boolean
 }
 
 export interface EngineSnapshot {
@@ -44,6 +46,9 @@ export interface BrowserEngine {
   reload(id: TabId): Promise<void>
   stop(id: TabId): Promise<void>
 
+  /** Hint that the user may navigate to `input` soon (DNS + TCP/TLS warm-up). */
+  preconnect(input: string): void
+
   /** Where the native page surface should render, in window CSS pixels. */
   setViewportBounds(bounds: Bounds): void
 }
@@ -52,10 +57,11 @@ export interface BrowserEngine {
 export const IPC = {
   invoke: 'engine:invoke',
   bounds: 'engine:bounds',
+  preconnect: 'engine:preconnect',
   snapshot: 'engine:snapshot'
 } as const
 
-export type EngineCommand = Exclude<keyof BrowserEngine, 'subscribe' | 'setViewportBounds'>
+export type EngineCommand = Exclude<keyof BrowserEngine, 'subscribe' | 'setViewportBounds' | 'preconnect'>
 
 /** Turns URL-bar input into a navigable URL (or a search). */
 export function normalizeInput(input: string): string {

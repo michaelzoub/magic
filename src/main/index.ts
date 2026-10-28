@@ -3,6 +3,11 @@ import { join } from 'node:path'
 import { IPC, type Bounds, type EngineCommand } from '@shared/engine'
 import { ElectronEngine } from './electron-engine'
 
+// Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+
 const engines = new Map<number, ElectronEngine>()
 
 function createWindow(): void {
@@ -51,6 +56,7 @@ ipcMain.handle(IPC.invoke, (e, command: EngineCommand, ...args: unknown[]) => {
   return (engine[command] as (...a: unknown[]) => unknown)(...args)
 })
 
+ipcMain.on(IPC.preconnect, (e, input: string) => engines.get(e.sender.id)?.preconnect(input))
 ipcMain.on(IPC.bounds, (e, bounds: Bounds) => engines.get(e.sender.id)?.setViewportBounds(bounds))
 
 app.whenReady().then(() => {

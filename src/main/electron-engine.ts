@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView } from 'electron'
+import { BrowserWindow, WebContentsView, session } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
   normalizeInput,
@@ -11,7 +11,20 @@ import {
 
 interface Tab {
   state: TabState
-  view: WebContentsView
+  view: WebContentsView | null
+  lastActive: number
+}
+
+/** Background tabs idle longer than this are unloaded. */
+const DISCARD_AFTER_MS = 10 * 60_000
+const EMIT_INTERVAL_MS = 16
+
+function createView(): WebContentsView {
+  const view = new WebContentsView({
+    webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: true, spellcheck: false }
+  })
+  view.setBackgroundColor('#ffffff')
+  return view
 }
 
 /** Electron/Chromium implementation of BrowserEngine. One instance per window. */
@@ -21,8 +34,13 @@ export class ElectronEngine implements BrowserEngine {
   private activeTabId: TabId | null = null
   private bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 }
   private listeners = new Set<(s: EngineSnapshot) => void>()
+  private spare: WebContentsView | null = null
+  private emitTimer: NodeJS.Timeout | null = null
+  private discardTimer: NodeJS.Timeout
 
-  constructor(private window: BrowserWindow) {}
+  constructor(private window: BrowserWindow) {
+    this.discardTimer = setInterval(() => this.discardIdleTabs(), 60_000)
+  }
 
   async getSnapshot(): Promise<EngineSnapshot> {
     return this.snapshot()
@@ -35,20 +53,19 @@ export class ElectronEngine implements BrowserEngine {
 
   async createTab(url?: string): Promise<TabId> {
     const id = randomUUID()
-    const view = new WebContentsView({
-      webPreferences: { sandbox: true, contextIsolation: true }
-    })
-    view.setBorderRadius?.(8)
     const tab: Tab = {
-      view,
-      state: { id, url: '', title: 'New Tab', isLoading: false, canGoBack: false, canGoForward: false }
+      view: this.takeView(),
+      lastActive: Date.now(),
+      state: {
+        id, url: '', title: 'New Tab', isLoading: false,
+        canGoBack: false, canGoForward: false, isDiscarded: false
+      }
     }
     this.tabs.set(id, tab)
     this.order.push(id)
     this.wire(tab)
     await this.activateTab(id)
     if (url) await this.navigate(id, url)
-    else this.emit()
     return id
   }
 
@@ -56,8 +73,7 @@ export class ElectronEngine implements BrowserEngine {
     const tab = this.tabs.get(id)
     if (!tab) return
     const index = this.order.indexOf(id)
-    this.window.contentView.removeChildView(tab.view)
-    tab.view.webContents.close()
+    this.destroyView(tab)
     this.tabs.delete(id)
     this.order.splice(index, 1)
 
@@ -71,15 +87,20 @@ export class ElectronEngine implements BrowserEngine {
   }
 
   async activateTab(id: TabId): Promise<void> {
-    if (!this.tabs.has(id)) return
+    const tab = this.tabs.get(id)
+    if (!tab) return
+    const previous = this.activeTabId && this.tabs.get(this.activeTabId)
+    if (previous) previous.lastActive = Date.now()
+    tab.lastActive = Date.now()
     this.activeTabId = id
+    if (tab.state.isDiscarded) this.restore(tab)
     this.layout()
     this.emit()
   }
 
   async navigate(id: TabId, input: string): Promise<void> {
     const tab = this.tabs.get(id)
-    if (!tab) return
+    if (!tab?.view) return
     const url = normalizeInput(input)
     tab.state.url = url
     this.layout()
@@ -88,16 +109,22 @@ export class ElectronEngine implements BrowserEngine {
   }
 
   async goBack(id: TabId) {
-    this.tabs.get(id)?.view.webContents.navigationHistory.goBack()
+    this.tabs.get(id)?.view?.webContents.navigationHistory.goBack()
   }
   async goForward(id: TabId) {
-    this.tabs.get(id)?.view.webContents.navigationHistory.goForward()
+    this.tabs.get(id)?.view?.webContents.navigationHistory.goForward()
   }
   async reload(id: TabId) {
-    this.tabs.get(id)?.view.webContents.reload()
+    this.tabs.get(id)?.view?.webContents.reload()
   }
   async stop(id: TabId) {
-    this.tabs.get(id)?.view.webContents.stop()
+    this.tabs.get(id)?.view?.webContents.stop()
+  }
+
+  preconnect(input: string): void {
+    const url = normalizeInput(input)
+    if (!/^https?:/.test(url)) return
+    session.defaultSession.preconnect({ url, numSockets: 1 })
   }
 
   setViewportBounds(bounds: Bounds): void {
@@ -106,14 +133,53 @@ export class ElectronEngine implements BrowserEngine {
   }
 
   dispose(): void {
+    clearInterval(this.discardTimer)
+    if (this.emitTimer) clearTimeout(this.emitTimer)
     this.listeners.clear()
-    for (const { view } of this.tabs.values()) view.webContents.close()
+    for (const tab of this.tabs.values()) this.destroyView(tab)
+    this.spare?.webContents.close()
     this.tabs.clear()
+  }
+
+  /** Hands out the pre-warmed view and warms the next one when idle. */
+  private takeView(): WebContentsView {
+    const view = this.spare ?? createView()
+    this.spare = null
+    setTimeout(() => {
+      if (!this.spare && !this.window.isDestroyed()) this.spare = createView()
+    }, 500)
+    return view
+  }
+
+  private destroyView(tab: Tab): void {
+    if (!tab.view) return
+    if (this.window.contentView.children.includes(tab.view)) this.window.contentView.removeChildView(tab.view)
+    tab.view.webContents.close()
+    tab.view = null
+  }
+
+  private discardIdleTabs(): void {
+    const cutoff = Date.now() - DISCARD_AFTER_MS
+    for (const [id, tab] of this.tabs) {
+      if (id === this.activeTabId || tab.state.isDiscarded || !tab.state.url || tab.lastActive > cutoff) continue
+      if (tab.view?.webContents.isCurrentlyAudible()) continue
+      this.destroyView(tab)
+      Object.assign(tab.state, { isDiscarded: true, isLoading: false })
+    }
+    this.emit()
+  }
+
+  private restore(tab: Tab): void {
+    tab.view = this.takeView()
+    tab.state.isDiscarded = false
+    this.wire(tab)
+    tab.view.webContents.loadURL(tab.state.url).catch(() => {})
   }
 
   /** Only the active tab with real content is attached; blank tabs show the shell's empty state. */
   private layout(): void {
     for (const [id, { view, state }] of this.tabs) {
+      if (!view) continue
       const visible = id === this.activeTabId && state.url !== '' && this.bounds.width > 0
       const attached = this.window.contentView.children.includes(view)
       if (visible) {
@@ -125,8 +191,9 @@ export class ElectronEngine implements BrowserEngine {
     }
   }
 
-  private wire({ view, state }: Tab): void {
-    const wc = view.webContents
+  private wire(tab: Tab): void {
+    const { state } = tab
+    const wc = tab.view!.webContents
     const sync = () => {
       if (wc.isDestroyed()) return
       state.url = wc.getURL() || state.url
@@ -158,8 +225,13 @@ export class ElectronEngine implements BrowserEngine {
     }
   }
 
+  /** Coalesces bursts of page events into at most one UI update per frame. */
   private emit(): void {
-    const s = this.snapshot()
-    for (const l of this.listeners) l(s)
+    if (this.emitTimer) return
+    this.emitTimer = setTimeout(() => {
+      this.emitTimer = null
+      const s = this.snapshot()
+      for (const l of this.listeners) l(s)
+    }, EMIT_INTERVAL_MS)
   }
 }

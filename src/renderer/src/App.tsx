@@ -42,6 +42,7 @@ export function App() {
             onReload={() => id && engine.reload(id)}
             onStop={() => id && engine.stop(id)}
             onNavigate={(input) => id && engine.navigate(id, input)}
+            onPreconnect={(input) => engine.preconnect(input)}
           />
           <div className="flex min-h-0 flex-1 px-1 pb-1">
             <Viewport tab={activeTab} />
