@@ -2,16 +2,10 @@
  * Persistence ports. Implementations (in-memory, file, IndexedDB, remote…)
  * live outside `core` and are injected into services. All methods are async so
  * any storage backend can satisfy them.
+ *
+ * Site probabilities are part of `Workspace` and persist with it.
  */
-import type {
-  SiteKey,
-  SiteWorkspaceMap,
-  TabAssignment,
-  TabId,
-  Workspace,
-  WorkspaceId,
-  WorkspaceSite
-} from './types'
+import type { TabAssignment, TabId, Workspace, WorkspaceId } from './types'
 
 export interface WorkspaceRepository {
   getAll(): Promise<Workspace[]>
@@ -27,13 +21,4 @@ export interface TabAssignmentRepository {
   getByWorkspace(workspaceId: WorkspaceId): Promise<TabAssignment[]>
   save(assignment: TabAssignment): Promise<void>
   remove(tabId: TabId): Promise<void>
-}
-
-export interface SiteAffinityRepository {
-  getAll(): Promise<SiteWorkspaceMap>
-  getBySite(site: SiteKey): Promise<WorkspaceSite[]>
-  save(site: SiteKey, entries: readonly WorkspaceSite[]): Promise<void>
-  remove(site: SiteKey): Promise<void>
-  /** Drop every affinity entry pointing at a workspace (e.g. on deletion). */
-  removeWorkspace(workspaceId: WorkspaceId): Promise<void>
 }

@@ -1,11 +1,11 @@
 /**
  * Service contracts consumed by the app shell. Tab assignment and site
- * affinity are deliberately separate: affinity is a probabilistic preference,
+ * probabilities are deliberately separate: probability is a preference,
  * assignment is where a tab actually lives. Neither mutates the other.
  */
 import type {
   Listener,
-  SiteAffinityEvent,
+  SiteProbabilityEvent,
   TabAssignmentEvent,
   WorkspaceEvent
 } from './events'
@@ -13,16 +13,17 @@ import type {
   ChangeSource,
   CreateWorkspaceInput,
   SiteKey,
-  SiteWorkspaceMap,
+  SiteMap,
+  SiteMatch,
   TabAssignment,
   TabId,
   Unsubscribe,
   Workspace,
-  WorkspaceId,
-  WorkspaceSite
+  WorkspaceId
 } from './types'
 
 export interface WorkspaceService {
+  /** Rejects if another workspace already has this name (trimmed, case-insensitive). */
   create(input: CreateWorkspaceInput, source?: ChangeSource): Promise<Workspace>
   list(): Promise<Workspace[]>
   get(id: WorkspaceId): Promise<Workspace | null>
@@ -40,35 +41,30 @@ export interface TabAssignmentService {
   subscribe(listener: Listener<TabAssignmentEvent>): Unsubscribe
 }
 
-export interface SiteAffinityService {
-  getMap(): Promise<SiteWorkspaceMap>
-  getAffinities(site: SiteKey): Promise<WorkspaceSite[]>
-  /** Highest-probability workspace for a site, if any. */
-  getTopWorkspace(site: SiteKey): Promise<WorkspaceSite | null>
-  /** Replace all entries for a site. Probabilities must be within 0–1. */
-  setAffinities(
-    site: SiteKey,
-    entries: readonly WorkspaceSite[],
-    source?: ChangeSource
-  ): Promise<void>
-  clear(site: SiteKey, source?: ChangeSource): Promise<void>
-  subscribe(listener: Listener<SiteAffinityEvent>): Unsubscribe
+/** Reads and writes the `sites` map on each workspace. */
+export interface SiteProbabilityService {
+  /** Probability of `site` in one workspace; 0 if absent. Direct map lookup. */
+  get(workspaceId: WorkspaceId, site: SiteKey): Promise<number>
+  /** Probability must be within 0–1. */
+  set(workspaceId: WorkspaceId, site: SiteKey, probability: number, source?: ChangeSource): Promise<void>
+  remove(workspaceId: WorkspaceId, site: SiteKey, source?: ChangeSource): Promise<void>
+  /** Every workspace that knows `site`, highest probability first. */
+  match(site: SiteKey): Promise<SiteMatch[]>
+  subscribe(listener: Listener<SiteProbabilityEvent>): Unsubscribe
 }
 
-/** Maps a raw URL to the key used for affinity lookups. */
+/** Maps a raw URL to the key used for site lookups. */
 export interface SiteKeyResolver {
   resolve(url: string): SiteKey | null
 }
 
 /**
  * Extension point for external producers (heuristics, agents, sync) that
- * propose affinity updates. Implementations read via the services and write
- * back through them using a `ChangeSource` identifying themselves.
+ * propose probability updates. Implementations read via the services and
+ * write back through them using a `ChangeSource` identifying themselves.
  */
-export interface SiteAffinityProvider {
+export interface SiteProbabilityProvider {
   readonly id: string
-  computeAffinities(
-    site: SiteKey,
-    context: { workspaces: readonly Workspace[]; current: readonly WorkspaceSite[] }
-  ): Promise<WorkspaceSite[] | null>
+  /** Proposed full site map for a workspace, or null for no opinion. */
+  computeSites(workspace: Workspace): Promise<SiteMap | null>
 }

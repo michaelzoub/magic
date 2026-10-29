@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, session } from 'electron'
+import { BrowserWindow, WebContentsView, session, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
   normalizeInput,
@@ -130,6 +130,11 @@ export class ElectronEngine implements BrowserEngine {
   setViewportBounds(bounds: Bounds): void {
     this.bounds = bounds
     this.layout()
+  }
+
+  /** Live WebContents for a tab, or null if it's unknown or discarded. Integration-layer only. */
+  webContentsFor(id: TabId): WebContents | null {
+    return this.tabs.get(id)?.view?.webContents ?? null
   }
 
   dispose(): void {

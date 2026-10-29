@@ -1,9 +1,11 @@
 import type { BrowserEngine } from '@shared/engine'
+import type { ShellOverlay } from '@shared/overlay'
 import { createMemoryEngine } from './memory-engine'
 
 declare global {
   interface Window {
     engine?: BrowserEngine
+    overlay?: ShellOverlay
     platform?: string
   }
 }

@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import { IPC, type Bounds, type EngineCommand } from '@shared/engine'
+import { OVERLAY_IPC, type TooltipRequest } from '@shared/overlay'
 import { ElectronEngine } from './electron-engine'
+import { TooltipOverlay } from './tooltip-overlay'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -9,6 +11,7 @@ app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
 
 const engines = new Map<number, ElectronEngine>()
+const tooltips = new Map<number, TooltipOverlay>()
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -32,6 +35,7 @@ function createWindow(): void {
   const engine = new ElectronEngine(win)
   const wcId = win.webContents.id
   engines.set(wcId, engine)
+  tooltips.set(wcId, new TooltipOverlay(win))
   engine.subscribe((s) => !win.isDestroyed() && win.webContents.send(IPC.snapshot, s))
   void engine.createTab()
 
@@ -39,6 +43,8 @@ function createWindow(): void {
   win.on('closed', () => {
     engine.dispose()
     engines.delete(wcId)
+    tooltips.get(wcId)?.dispose()
+    tooltips.delete(wcId)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -58,6 +64,8 @@ ipcMain.handle(IPC.invoke, (e, command: EngineCommand, ...args: unknown[]) => {
 
 ipcMain.on(IPC.preconnect, (e, input: string) => engines.get(e.sender.id)?.preconnect(input))
 ipcMain.on(IPC.bounds, (e, bounds: Bounds) => engines.get(e.sender.id)?.setViewportBounds(bounds))
+ipcMain.on(OVERLAY_IPC.showTooltip, (e, req: TooltipRequest) => void tooltips.get(e.sender.id)?.show(req))
+ipcMain.on(OVERLAY_IPC.hideTooltip, (e) => tooltips.get(e.sender.id)?.hide())
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'system'

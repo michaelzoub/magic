@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type BrowserEngine, type EngineCommand, type EngineSnapshot } from '@shared/engine'
+import { OVERLAY_IPC, type ShellOverlay } from '@shared/overlay'
 
 const call =
   <C extends EngineCommand>(command: C) =>
@@ -25,5 +26,11 @@ const engine: BrowserEngine = {
   }
 }
 
+const overlay: ShellOverlay = {
+  showTooltip: (req) => ipcRenderer.send(OVERLAY_IPC.showTooltip, req),
+  hideTooltip: () => ipcRenderer.send(OVERLAY_IPC.hideTooltip)
+}
+
 contextBridge.exposeInMainWorld('engine', engine)
+contextBridge.exposeInMainWorld('overlay', overlay)
 contextBridge.exposeInMainWorld('platform', process.platform)

@@ -1,7 +1,11 @@
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import type { TooltipSide } from '@shared/overlay'
 import { surface } from './surface'
 
-type Side = 'top' | 'right' | 'bottom'
+type Side = TooltipSide
+
+const SHOW_DELAY_MS = 500
 
 // Position + a 2px rest offset that settles toward the anchor on hover.
 const place: Record<Side, string> = {
@@ -11,9 +15,9 @@ const place: Record<Side, string> = {
 }
 
 /**
- * Figma-style hover hint. CSS-only so it costs nothing at rest; appears after a
- * short delay and hides instantly. Pick a side away from the native page view,
- * which paints above the renderer.
+ * Figma-style hover hint: appears after a short delay and hides instantly.
+ * Inside the shell it renders in a native overlay so it can sit above the page
+ * view (renderer DOM never can); in a plain browser it falls back to CSS.
  */
 export function Tooltip({ label, shortcut, side = 'bottom', children }: {
   label: string
@@ -21,6 +25,35 @@ export function Tooltip({ label, shortcut, side = 'bottom', children }: {
   side?: Side
   children: ReactNode
 }) {
+  const overlay = window.overlay
+  const ref = useRef<HTMLSpanElement>(null)
+  const timer = useRef<number>(undefined)
+  const shown = useRef(false)
+
+  const hide = () => {
+    clearTimeout(timer.current)
+    if (shown.current) overlay?.hideTooltip()
+    shown.current = false
+  }
+  useEffect(() => hide, [])
+
+  if (overlay) {
+    const show = () => {
+      clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => {
+        const r = ref.current?.getBoundingClientRect()
+        if (!r) return
+        shown.current = true
+        overlay.showTooltip({ label, shortcut, side, anchor: { x: r.x, y: r.y, width: r.width, height: r.height } })
+      }, SHOW_DELAY_MS)
+    }
+    return (
+      <span ref={ref} className="relative inline-flex" onMouseEnter={show} onMouseLeave={hide} onMouseDown={hide}>
+        {children}
+      </span>
+    )
+  }
+
   return (
     <span className="group/tip relative inline-flex">
       {children}

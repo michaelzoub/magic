@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import type { ReactNode, SVGProps } from 'react'
-import { Memory, Settings, SidebarIcon, Workspaces } from './icons'
+import { Memory, Settings, SidebarIcon } from './icons'
 import { Tooltip } from './ui'
-import { WorkspaceSwitcher } from './WorkspaceSwitcher'
+import { WorkspaceList, WorkspaceMenu, useWorkspaces } from './WorkspaceSwitcher'
 import { motion } from '@/motion'
 
 export const RAIL = 52
@@ -13,7 +13,6 @@ const SNAP = 110 // releasing narrower than this collapses to the rail
 type Item = { label: string; Icon: (p: SVGProps<SVGSVGElement>) => ReactNode }
 
 const primary: Item[] = [
-  { label: 'Workspace', Icon: Workspaces },
   { label: 'Memory', Icon: Memory },
 ]
 
@@ -38,6 +37,7 @@ export function Sidebar({ width, onWidth, onToggle }: { width: number; onWidth(w
   const [dragging, setDragging] = useState(false)
   const start = useRef({ x: 0, w: 0 })
   const open = width > RAIL
+  const ws = useWorkspaces()
 
   const onPointerDown = (e: PointerEvent) => {
     e.preventDefault()
@@ -73,15 +73,18 @@ export function Sidebar({ width, onWidth, onToggle }: { width: number; onWidth(w
       </div>
 
       <nav className="flex flex-col gap-0.5">
+        <WorkspaceMenu open={open} ws={ws} />
         {primary.map(({ label, Icon }) => (
           <RailButton key={label} label={label} open={open}><Icon /></RailButton>
         ))}
       </nav>
 
-      {/* Context area: workspace switcher, pinned items, recent contexts slot in here. */}
-      <section className="mt-3 flex flex-col gap-0.5 border-t border-chrome-border/[0.08] pt-3">
-        <WorkspaceSwitcher open={open} />
-      </section>
+      {/* Context area: workspaces picked from the menu, pinned items, recent contexts. */}
+      {ws.list.length > 0 && (
+        <section className="mt-3 flex flex-col gap-0.5 border-t border-chrome-border/[0.08] pt-3">
+          <WorkspaceList open={open} ws={ws} />
+        </section>
+      )}
 
       <div className="mt-auto">
         <RailButton label="Settings" open={open}><Settings /></RailButton>
