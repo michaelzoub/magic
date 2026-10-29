@@ -9,6 +9,7 @@ export default defineConfig({
   preload: { resolve: { alias: shared } },
   renderer: {
     resolve: { alias: { ...shared, '@': resolve(__dirname, 'src/renderer/src') } },
+    server: { port: 5174, strictPort: true },
     plugins: [preact()]
   }
 })

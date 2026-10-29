@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useBrowser } from '@/engine/useBrowser'
-import { Sidebar } from '@/components/Sidebar'
+import { RAIL, Sidebar } from '@/components/Sidebar'
 import { TabStrip } from '@/components/TabStrip'
 import { Toolbar } from '@/components/Toolbar'
 import { Viewport } from '@/components/Viewport'
@@ -8,6 +8,10 @@ import { Viewport } from '@/components/Viewport'
 export function App() {
   const { tabs, activeTabId, activeTab, engine } = useBrowser()
   const id = activeTab?.id
+  const [sidebar, setSidebar] = useState(RAIL)
+  const [lastOpen, setLastOpen] = useState(208)
+  const open = sidebar > RAIL
+  const resize = (w: number) => (setSidebar(w), w > RAIL && setLastOpen(w))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -23,9 +27,9 @@ export function App() {
   return (
     <div className="flex h-full">
       <div className="drag absolute inset-x-0 top-0 h-[44px]" />
-      <Sidebar />
+      <Sidebar width={sidebar} onWidth={resize} onToggle={() => setSidebar(open ? RAIL : lastOpen)} />
       <main className="relative flex min-w-0 flex-1 flex-col pb-2 pr-2">
-        <header className="flex h-[44px] items-center pl-[28px] pr-1">
+        <header className="flex h-[44px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebar) }}>
           <TabStrip
             tabs={tabs}
             activeTabId={activeTabId}
@@ -34,20 +38,16 @@ export function App() {
             onNew={() => engine.createTab()}
           />
         </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-chrome-border/[0.08] bg-chrome-panel/60">
-          <Toolbar
-            tab={activeTab}
-            onBack={() => id && engine.goBack(id)}
-            onForward={() => id && engine.goForward(id)}
-            onReload={() => id && engine.reload(id)}
-            onStop={() => id && engine.stop(id)}
-            onNavigate={(input) => id && engine.navigate(id, input)}
-            onPreconnect={(input) => engine.preconnect(input)}
-          />
-          <div className="flex min-h-0 flex-1 px-1 pb-1">
-            <Viewport tab={activeTab} />
-          </div>
-        </div>
+        <Toolbar
+          tab={activeTab}
+          onBack={() => id && engine.goBack(id)}
+          onForward={() => id && engine.goForward(id)}
+          onReload={() => id && engine.reload(id)}
+          onStop={() => id && engine.stop(id)}
+          onNavigate={(input) => id && engine.navigate(id, input)}
+          onPreconnect={(input) => engine.preconnect(input)}
+        />
+        <Viewport tab={activeTab} />
       </main>
     </div>
   )

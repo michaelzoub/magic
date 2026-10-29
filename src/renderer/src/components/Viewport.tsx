@@ -33,7 +33,7 @@ export function Viewport({ tab }: { tab: TabState | null }) {
   return (
     <div
       ref={ref}
-      className="relative flex-1 overflow-hidden rounded-lg bg-chrome-panel shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.1),0_1px_3px_rgb(0_0_0/0.05)]"
+      className="relative flex-1 overflow-hidden rounded-lg bg-chrome-panel shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.08),0_1px_2px_rgb(0_0_0/0.04)]"
     >
       {!tab?.url && (
         <div ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.fadeIn(el, 0.05) } }} className="absolute inset-0 grid place-items-center">

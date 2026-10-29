@@ -39,10 +39,10 @@ export function UrlBar({ url, onSubmit, onPreconnect }: Props) {
         onSubmit(value)
         ref.current?.blur()
       }}
-      className={`no-drag flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 transition-colors duration-100
+      className={`no-drag flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 transition-[background-color,box-shadow] duration-100
         ${focused
-          ? 'border-chrome-border/20 bg-chrome-panel shadow-[0_0_0_3px_rgb(var(--chrome-border)/0.05)]'
-          : 'border-chrome-border/[0.07] bg-chrome-hover/[0.03] hover:bg-chrome-hover/[0.05]'}`}
+          ? 'bg-chrome-panel shadow-[0_0_0_1px_rgb(94_106_210/0.55),0_0_0_3.5px_rgb(94_106_210/0.12)]'
+          : 'bg-chrome-hover/[0.04] hover:bg-chrome-hover/[0.06]'}`}
     >
       {secure && !focused ? <Lock className="h-3 w-3 shrink-0 text-chrome-faint" /> : <Search className="h-3 w-3 shrink-0 text-chrome-faint" />}
       <input
