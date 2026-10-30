@@ -3,7 +3,7 @@
  * live outside `core/tools`; nothing here may import Electron or an agent runtime.
  */
 import type { BrowserEngine, TabId } from '@shared/engine'
-import type { ChangeSource, TabAssignmentService, WorkspaceService } from '../workspaces'
+import type { BrowserStore } from '../workspaces'
 
 export interface PageElement {
   /** Index within the query result; stable only until the page changes. */
@@ -32,12 +32,9 @@ export interface PageDriver {
   type(tabId: TabId, selector: string, index: number, text: string, opts: { clear: boolean; submit: boolean }): Promise<void>
 }
 
-/** Everything a tool may touch. Workspace services are optional; without them, ownership is not enforced. */
+/** Everything a tool may touch. The store is optional; without it, ownership is not enforced. */
 export interface ToolContext {
   browser: BrowserEngine
   page: PageDriver
-  workspaces?: WorkspaceService
-  tabAssignments?: TabAssignmentService
-  /** Attributed on workspace changes made by tools. */
-  source: ChangeSource
+  store?: BrowserStore
 }

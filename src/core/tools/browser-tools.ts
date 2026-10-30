@@ -29,9 +29,9 @@ export const openTab = defineTool({
   description: 'Open a new tab, optionally loading a URL or search query, and make it active.',
   input: z.object({ url: z.string().optional().describe('URL or search query') }),
   async execute({ url }, ctx): Promise<{ tabId: string }> {
-    const workspaceId = await activeWorkspaceId(ctx)
+    const workspaceId = activeWorkspaceId(ctx)
     const id = await ctx.browser.createTab(url)
-    if (workspaceId && ctx.tabAssignments) await ctx.tabAssignments.assign(id, workspaceId, ctx.source)
+    if (workspaceId && ctx.store) ctx.store.assign(id, workspaceId)
     return { tabId: id }
   }
 })
@@ -43,7 +43,7 @@ export const closeTab = defineTool({
   async execute(input, ctx): Promise<{ closedTabId: string }> {
     const tab = await resolveTab(ctx, input.tabId)
     await ctx.browser.closeTab(tab.id)
-    await ctx.tabAssignments?.unassign(tab.id, ctx.source)
+    ctx.store?.unassign(tab.id)
     return { closedTabId: tab.id }
   }
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserEngine, EngineSnapshot, TabState } from '@shared/engine'
-import type { TabAssignmentService, Workspace, WorkspaceService } from '../workspaces'
+import { BrowserStore } from '../workspaces'
 import type { PageDriver, ToolContext } from './ports'
 import { createToolRegistry } from './registry'
 
@@ -32,30 +32,17 @@ function ctx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     browser: fakeBrowser({ tabs: [tab('a', { canGoBack: true }), tab('b')], activeTabId: 'a' }),
     page: fakePage(),
-    source: { kind: 'agent', agentId: 'test' },
     ...overrides
   }
 }
 
 function workspaceCtx(): ToolContext {
-  const ws: Workspace[] = [
-    { id: 'w1', name: 'Work', status: 'active', sites: new Map() },
-    { id: 'w2', name: 'Home', status: 'background', sites: new Map() }
-  ]
-  const owner: Record<string, string> = { a: 'w1', b: 'w2' }
-  const workspaces = {
-    list: vi.fn(async () => ws),
-    get: vi.fn(async (id: string) => ws.find((w) => w.id === id) ?? null),
-    getActive: vi.fn(async () => ws.find((w) => w.status === 'active') ?? null),
-    switchTo: vi.fn(async (id: string) => ws.find((w) => w.id === id)!)
-  } as unknown as WorkspaceService
-  const tabAssignments = {
-    assign: vi.fn(async (tabId: string, workspaceId: string) => ({ tabId, workspaceId })),
-    unassign: vi.fn(async () => {}),
-    getWorkspaceForTab: vi.fn(async (id: string) => owner[id] ?? null),
-    listTabs: vi.fn(async (w: string) => Object.keys(owner).filter((t) => owner[t] === w))
-  } as unknown as TabAssignmentService
-  return ctx({ workspaces, tabAssignments })
+  const store = new BrowserStore()
+  store.create({ id: 'w1', name: 'Work' })
+  store.create({ id: 'w2', name: 'Home' })
+  store.assign('a', 'w1')
+  store.assign('b', 'w2')
+  return ctx({ store })
 }
 
 const registry = createToolRegistry()
@@ -121,14 +108,20 @@ describe('workspace ownership', () => {
   it('assigns opened tabs to the active workspace', async () => {
     const c = workspaceCtx()
     await registry.execute('open_tab', { url: 'x.com' }, c)
-    expect(c.tabAssignments!.assign).toHaveBeenCalledWith('new', 'w1', c.source)
+    expect(c.store!.getWorkspaceForTab('new')).toBe('w1')
+  })
+
+  it('unassigns closed tabs', async () => {
+    const c = workspaceCtx()
+    await registry.execute('close_tab', { tabId: 'a' }, c)
+    expect(c.store!.getWorkspaceForTab('a')).toBeNull()
   })
 
   it('lists and switches workspaces', async () => {
     const c = workspaceCtx()
     expect(await registry.execute('list_workspaces', {}, c)).toMatchObject({ ok: true, data: { workspaces: [{ id: 'w1', active: true }, { id: 'w2', active: false }] } })
     expect(await registry.execute('switch_workspace', { workspaceId: 'w2' }, c)).toMatchObject({ ok: true })
-    expect(c.workspaces!.switchTo).toHaveBeenCalledWith('w2', c.source)
+    expect(c.store!.getState().activeWorkspaceId).toBe('w2')
     expect(await registry.execute('switch_workspace', { workspaceId: 'nope' }, c)).toMatchObject({ ok: false, error: { code: 'not_found' } })
   })
 

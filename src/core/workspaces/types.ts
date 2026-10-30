@@ -8,8 +8,6 @@ export type TabId = string
 /** Normalized site key (e.g. registrable domain `github.com`). */
 export type SiteKey = string
 
-export type WorkspaceStatus = 'active' | 'background'
-
 /** Site → usage probability (0–1) within one workspace. */
 export type SiteMap = Map<SiteKey, number>
 
@@ -17,7 +15,6 @@ export interface Workspace {
   id: WorkspaceId
   /** Unique across workspaces (compared trimmed, case-insensitive). */
   name: string
-  status: WorkspaceStatus
   /** How likely each site is to be used in this workspace, e.g. github.com → 0.8. */
   sites: SiteMap
 }
@@ -33,12 +30,6 @@ export interface TabAssignment {
   tabId: TabId
   workspaceId: WorkspaceId
 }
-
-/** Who caused a change — lets agent-driven updates be audited or filtered. */
-export type ChangeSource =
-  | { kind: 'user' }
-  | { kind: 'system' }
-  | { kind: 'agent'; agentId: string }
 
 export interface CreateWorkspaceInput {
   name: string
