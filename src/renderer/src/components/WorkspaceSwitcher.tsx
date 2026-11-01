@@ -1,63 +1,37 @@
 import { useCallback, useState } from 'react'
-import type { ReactNode, SVGProps } from 'react'
-import { Briefcase, GradCap, Layers, Plus, User, Workspaces } from './icons'
+import { Plus, Workspaces } from './icons'
 import { MenuDivider, MenuItem, MenuLabel, Popover, Tooltip } from './ui'
 import { motion } from '@/motion'
+import type { UseWorkspaces } from '@/engine/useWorkspaces'
 
-type Workspace = { id: string; name: string; Icon: (p: SVGProps<SVGSVGElement>) => ReactNode }
-
-// Mock data; swap for a store once workspaces are real.
-const seed: Workspace[] = [
-  { id: 'personal', name: 'Personal', Icon: User },
-  { id: 'work', name: 'Work', Icon: Briefcase },
-  { id: 'school', name: 'School', Icon: GradCap },
-]
-
-const key = (name: string) => name.trim().toLowerCase()
-
-/**
- * Workspace state shared by the menu and the sidebar list.
- * Invariant: workspace names are unique (trimmed, case-insensitive).
- */
-export function useWorkspaces() {
-  const [all, setAll] = useState(seed)
-  const [shown, setShown] = useState<string[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-
-  const select = useCallback((id: string) => {
-    setShown((s) => (s.includes(id) ? s : [...s, id]))
-    setActiveId(id)
-  }, [])
-
-  /** Returns an error message, or null on success. */
-  const create = (raw: string): string | null => {
-    const name = raw.trim()
-    if (!name) return 'Name is required'
-    if (all.some((w) => key(w.name) === key(name))) return `“${name}” already exists`
-    const w: Workspace = { id: crypto.randomUUID(), name, Icon: Layers }
-    setAll((a) => [...a, w])
-    select(w.id)
-    return null
-  }
-
-  const list = shown.map((id) => all.find((w) => w.id === id)!)
-  return { all, list, activeId, select, create }
-}
-
-type State = ReturnType<typeof useWorkspaces>
+type State = UseWorkspaces
 
 const row = `no-drag flex h-8 w-full items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] transition-colors duration-100
   hover:bg-chrome-hover/[0.06] hover:text-chrome-text active:bg-chrome-hover/[0.09]`
 
 /** The "Workspace" nav button; opens the switcher popover. */
-export function WorkspaceMenu({ open: expanded, ws }: { open: boolean; ws: State }) {
+export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenChange }: {
+  open: boolean
+  ws: State
+  onSelect(id: string): void
+  onCreate(name: string): Promise<string | null>
+  /** Lets the shell detach the native page view while the dropdown is open. */
+  onOpenChange?(open: boolean): void
+}) {
   const [menu, setMenu] = useState(false)
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const close = useCallback(() => (setMenu(false), setDraft(null), setError(null)), [])
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setMenu(next)
+      onOpenChange?.(next)
+    },
+    [onOpenChange]
+  )
+  const close = useCallback(() => (setOpen(false), setDraft(null), setError(null)), [setOpen])
 
-  const submit = () => {
-    const err = ws.create(draft ?? '')
+  const submit = async () => {
+    const err = await onCreate(draft ?? '')
     err ? setError(err) : close()
   }
 
@@ -67,7 +41,7 @@ export function WorkspaceMenu({ open: expanded, ws }: { open: boolean; ws: State
       aria-label="Workspace"
       aria-haspopup="menu"
       aria-expanded={menu}
-      onClick={(e) => (motion.press(e.currentTarget), menu ? close() : setMenu(true))}
+      onClick={(e) => (motion.press(e.currentTarget), menu ? close() : setOpen(true))}
       className={`${row} ${menu ? 'bg-chrome-hover/[0.06] text-chrome-text' : 'text-chrome-muted'}`}
     >
       <span className="grid w-4 shrink-0 place-items-center"><Workspaces /></span>
@@ -86,7 +60,7 @@ export function WorkspaceMenu({ open: expanded, ws }: { open: boolean; ws: State
             icon={<w.Icon />}
             label={w.name}
             selected={w.id === ws.activeId}
-            onSelect={() => (ws.select(w.id), close())}
+            onSelect={() => (onSelect(w.id), close())}
           />
         ))}
         <MenuDivider />
@@ -116,7 +90,7 @@ export function WorkspaceMenu({ open: expanded, ws }: { open: boolean; ws: State
 }
 
 /** Sidebar section listing workspaces picked or created from the menu. */
-export function WorkspaceList({ open: expanded, ws }: { open: boolean; ws: State }) {
+export function WorkspaceList({ open: expanded, ws, onSelect }: { open: boolean; ws: State; onSelect(id: string): void }) {
   return (
     <>
       {ws.list.map((w) => {
@@ -126,7 +100,7 @@ export function WorkspaceList({ open: expanded, ws }: { open: boolean; ws: State
             type="button"
             aria-label={w.name}
             aria-current={active}
-            onClick={(e) => (motion.press(e.currentTarget), ws.select(w.id))}
+            onClick={(e) => (motion.press(e.currentTarget), onSelect(w.id))}
             className={`${row} ${active ? 'bg-chrome-hover/[0.06] text-chrome-text' : 'text-chrome-muted'}`}
           >
             <span className="grid w-4 shrink-0 place-items-center"><w.Icon /></span>

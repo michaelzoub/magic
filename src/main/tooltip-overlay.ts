@@ -3,11 +3,12 @@ import type { TooltipRequest } from '@shared/overlay'
 
 const GAP = { top: 6, bottom: 6, right: 8 }
 
-// Mirrors the renderer's `surface` look so native tooltips match in-DOM ones.
+// Mirrors the renderer's `surface` look (charcoal bg — see ui/surface.ts) so
+// native tooltips match in-DOM ones.
 const HTML = `<!doctype html><html><head><style>
 html,body{margin:0;background:transparent;overflow:hidden}
 #t{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border-radius:5px;padding:4px 8px;
-background:#1e1e1e;color:#fff;font:500 11px/16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+background:#262626;color:#fff;font:500 11px/16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
 box-shadow:0 0 0 .5px rgb(255 255 255/.06);opacity:0;transition:opacity 100ms ease-out}
 #t.on{opacity:1}kbd{font:inherit;color:rgb(255 255 255/.45)}
 </style></head><body><div id="t"></div></body></html>`

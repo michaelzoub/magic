@@ -1,4 +1,5 @@
 import type { BrowserEngine } from '@shared/engine'
+import type { LoginImporter } from '@shared/import'
 import type { ShellOverlay } from '@shared/overlay'
 import { createMemoryEngine } from './memory-engine'
 
@@ -6,6 +7,7 @@ declare global {
   interface Window {
     engine?: BrowserEngine
     overlay?: ShellOverlay
+    importer?: LoginImporter
     platform?: string
   }
 }

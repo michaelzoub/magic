@@ -39,4 +39,27 @@ export interface CreateWorkspaceInput {
   sites?: SiteMap
 }
 
+/** A tab belonging to a workspace, saved while another workspace is open. */
+export interface WorkspaceTab {
+  id: TabId
+  url: string
+  title: string
+  favicon?: string
+}
+
+/** The open tabs of one workspace: exactly what becomes current on a switch to it. */
+export interface WorkspaceTabSet {
+  tabs: WorkspaceTab[]
+  activeTabId: TabId | null
+}
+
+/**
+ * How a workspace switch changes the open-tab array. Same clear-and-replace
+ * invariant as Memory's switch plan: every current tab is closed and the
+ * resulting array is exactly the target workspace's `tabs`, in order.
+ */
+export interface WorkspaceTabSwitch extends WorkspaceTabSet {
+  closeTabIds: TabId[]
+}
+
 export type Unsubscribe = () => void

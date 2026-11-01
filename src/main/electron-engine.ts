@@ -121,6 +121,17 @@ export class ElectronEngine implements BrowserEngine {
     this.tabs.get(id)?.view?.webContents.stop()
   }
 
+  async capturePage(id: TabId): Promise<string | null> {
+    const tab = this.tabs.get(id)
+    if (!tab?.view || !tab.state.url) return null
+    try {
+      const image = await tab.view.webContents.capturePage()
+      return image.isEmpty() ? null : image.toDataURL()
+    } catch {
+      return null
+    }
+  }
+
   preconnect(input: string): void {
     const url = normalizeInput(input)
     if (!/^https?:/.test(url)) return

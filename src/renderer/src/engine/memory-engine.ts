@@ -38,6 +38,7 @@ export function createMemoryEngine(): BrowserEngine {
     goForward: noop,
     reload: noop,
     stop: noop,
+    capturePage: async () => null,
     preconnect: () => {},
     setViewportBounds: () => {}
   }

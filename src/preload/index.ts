@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type BrowserEngine, type EngineCommand, type EngineSnapshot } from '@shared/engine'
+import { IMPORT_IPC, type LoginImporter } from '@shared/import'
 import { OVERLAY_IPC, type ShellOverlay } from '@shared/overlay'
 
 const call =
@@ -17,6 +18,7 @@ const engine: BrowserEngine = {
   goForward: call('goForward'),
   reload: call('reload'),
   stop: call('stop'),
+  capturePage: call('capturePage'),
   preconnect: (input) => ipcRenderer.send(IPC.preconnect, input),
   setViewportBounds: (b) => ipcRenderer.send(IPC.bounds, b),
   subscribe: (listener) => {
@@ -31,6 +33,12 @@ const overlay: ShellOverlay = {
   hideTooltip: () => ipcRenderer.send(OVERLAY_IPC.hideTooltip)
 }
 
+const importer: LoginImporter = {
+  detect: () => ipcRenderer.invoke(IMPORT_IPC.detect),
+  importLogins: (sourceId) => ipcRenderer.invoke(IMPORT_IPC.importLogins, sourceId)
+}
+
 contextBridge.exposeInMainWorld('engine', engine)
+contextBridge.exposeInMainWorld('importer', importer)
 contextBridge.exposeInMainWorld('overlay', overlay)
 contextBridge.exposeInMainWorld('platform', process.platform)
