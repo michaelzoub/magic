@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBrowser } from '@/engine/useBrowser'
 import { useMemory } from '@/engine/useMemory'
 import { useWorkspaces } from '@/engine/useWorkspaces'
@@ -52,11 +52,24 @@ export function App() {
   }
 
   /** Create + switch: a new workspace starts empty; the old tabs stay saved under theirs. */
-  const createWorkspace = async (name: string): Promise<string | null> => {
-    const { error, plan } = ws.create(name, currentTabSet())
+  const createWorkspace = async (name: string, description: string): Promise<string | null> => {
+    const { error, plan } = ws.create(name, description, currentTabSet())
     if (!error && plan) await applySwitch(plan)
     return error
   }
+
+  // Once workspaces are rehydrated from the local database, restore the
+  // active workspace's saved tabs (replacing the blank startup tab) — once.
+  const restoredTabs = useRef(false)
+  useEffect(() => {
+    if (!ws.ready || restoredTabs.current) return
+    restoredTabs.current = true
+    const saved = ws.getTabSet(ws.activeId)
+    if (saved.tabs.length > 0) {
+      void applySwitch({ closeTabIds: tabs.map((t) => t.id), tabs: saved.tabs, activeTabId: saved.activeTabId })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws.ready])
 
   /** Navigate to one side of a checkpoint, replacing the current tab array. */
   const navigateMemory = async (checkpointId: CheckpointId, target: MemoryNavigateTarget) => {

@@ -60,6 +60,20 @@ export class WorkspaceSwitchboard<T extends SwitchableWorkspace = SwitchableWork
     }
   }
 
+  /**
+   * Restore persisted listing/active state (e.g. from the local database on
+   * launch) without recording a switch. Unknown ids are dropped; the active
+   * workspace, when valid, is also listed so the sidebar invariant holds.
+   */
+  hydrate(listedIds: readonly WorkspaceId[], activeId: WorkspaceId | null): void {
+    const valid = (id: WorkspaceId | null): id is WorkspaceId => id !== null && this.get(id) !== null
+    this.listed.length = 0
+    for (const id of listedIds) if (valid(id) && !this.listed.includes(id)) this.listed.push(id)
+    this.active = valid(activeId) ? activeId : null
+    if (this.active !== null && !this.listed.includes(this.active)) this.listed.push(this.active)
+    this.emit()
+  }
+
   /** Every known workspace, in registration order. */
   get workspaces(): T[] {
     return [...this.all]

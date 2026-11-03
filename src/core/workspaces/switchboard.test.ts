@@ -102,6 +102,25 @@ describe('WorkspaceSwitchboard.switchTo — respective tabs become the open tabs
   })
 })
 
+describe('WorkspaceSwitchboard.hydrate — restoring persisted state', () => {
+  it('restores listed order and the active workspace without recording a switch', () => {
+    const board = seed()
+    board.hydrate(['school', 'work'], 'work')
+    expect(board.listedIds).toEqual(['school', 'work'])
+    expect(board.activeId).toBe('work')
+  })
+
+  it('drops unknown ids, dedupes, and lists the active workspace', () => {
+    const board = seed()
+    board.hydrate(['nope', 'work', 'work'], 'school')
+    expect(board.listedIds).toEqual(['work', 'school'])
+    expect(board.activeId).toBe('school')
+    board.hydrate([], 'nope')
+    expect(board.listedIds).toEqual([])
+    expect(board.activeId).toBeNull()
+  })
+})
+
 describe('WorkspaceSwitchboard creation / external switches', () => {
   it('addAndSwitch registers, lists, and activates the new workspace', () => {
     const board = seed()
