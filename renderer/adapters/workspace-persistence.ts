@@ -48,6 +48,11 @@ function createMemoryPersistence(): WorkspacePersistence {
         lastSwitchedAt: input.lastSwitchedAt ?? existing?.lastSwitchedAt ?? null
       })
     },
+    async deleteWorkspace(workspaceId) {
+      if (!workspaces.delete(workspaceId)) throw new Error(`No workspace with id ${workspaceId}`)
+      delete tabSets[workspaceId]
+      if (activeWorkspaceId === workspaceId) activeWorkspaceId = null
+    },
     async recordSwitch(input) {
       if (input.fromWorkspaceId === input.toWorkspaceId) return
       const target = workspaces.get(input.toWorkspaceId)

@@ -16,7 +16,11 @@ import { ResumePrompt } from './ResumePrompt'
  */
 export function Viewport({ tab, resume, onResume }: {
   tab: TabState | null
-  /** Most recent workspace switch, offered as a pickup prompt on blank tabs. */
+  /**
+   * Most recent workspace switch, offered only as a startup recovery
+   * prompt. Callers gate this (see startupRecovery.ts): it is non-null
+   * only at fresh app open with no tabs open, never mid-session.
+   */
   resume?: Checkpoint | null
   onResume?(): void
 }) {
@@ -45,7 +49,7 @@ export function Viewport({ tab, resume, onResume }: {
   return (
     <div
       ref={ref}
-      className="relative flex-1 overflow-hidden rounded-lg bg-chrome-panel shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.08),0_1px_2px_rgb(0_0_0/0.04)]"
+      className="relative flex-1 overflow-hidden bg-chrome-panel"
     >
       {!tab?.url && (
         <div ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.fadeIn(el, 0.05) } }} className="absolute inset-0 grid place-items-center overflow-y-auto p-6">

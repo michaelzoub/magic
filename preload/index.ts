@@ -78,6 +78,7 @@ const importer: LoginImporter = {
 const workspaces: WorkspacePersistence = {
   load: () => ipcRenderer.invoke(WORKSPACE_IPC.load),
   upsertWorkspace: (record) => ipcRenderer.invoke(WORKSPACE_IPC.upsert, record),
+  deleteWorkspace: (workspaceId) => ipcRenderer.invoke(WORKSPACE_IPC.delete, workspaceId),
   recordSwitch: (input) => ipcRenderer.invoke(WORKSPACE_IPC.recordSwitch, input),
   saveTabSet: (workspaceId, tabSet) => ipcRenderer.invoke(WORKSPACE_IPC.saveTabSet, workspaceId, tabSet),
   listSwitches: (limit) => ipcRenderer.invoke(WORKSPACE_IPC.listSwitches, limit)
@@ -85,7 +86,8 @@ const workspaces: WorkspacePersistence = {
 
 const onboarding: OnboardingPersistence = {
   completeOnboarding: (input) => ipcRenderer.invoke(ONBOARDING_IPC.complete, input),
-  loadOnboarding: () => ipcRenderer.invoke(ONBOARDING_IPC.load)
+  loadOnboarding: () => ipcRenderer.invoke(ONBOARDING_IPC.load),
+  updateProfile: (input) => ipcRenderer.invoke(ONBOARDING_IPC.updateProfile, input)
 }
 
 const agent: EmbeddedAgent = {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Lock, Search, Star } from '../ui/icons'
+import { Lock, Search } from '../ui/icons'
 
 interface Props {
   url: string
@@ -66,10 +66,7 @@ export function UrlBar({ url, onSubmit, onPreconnect }: Props) {
         className="min-w-0 flex-1 bg-transparent text-[13px] text-chrome-text outline-none placeholder:text-chrome-faint"
       />
       {!focused && (
-        <span className="flex shrink-0 items-center gap-2.5 text-chrome-faint">
-          <kbd className="font-sans text-[11px]">⌘ L</kbd>
-          <Star className="h-4 w-4" />
-        </span>
+        <kbd className="shrink-0 font-sans text-[11px] text-chrome-faint">⌘ L</kbd>
       )}
     </form>
   )

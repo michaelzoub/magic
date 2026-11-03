@@ -9,6 +9,13 @@ export interface SwitchableWorkspace {
   activeTabId?: TabId | null
 }
 
+/** Result of a removal: the fallback workspace landed on (when the active one was deleted), plus its tab plan. */
+export interface WorkspaceRemovalResult<T> {
+  workspace: T | null
+  /** Tab plan the caller must enact; null when the deleted workspace was not active. */
+  replaceTabs: WorkspaceTabSwitch | null
+}
+
 /** Result of a switch: the workspace, plus the tab plan the caller must enact. */
 export interface WorkspaceSwitchResult<T> {
   workspace: T
@@ -139,6 +146,35 @@ export class WorkspaceSwitchboard<T extends SwitchableWorkspace = SwitchableWork
         activeTabId: target.activeTabId
       }
     }
+  }
+
+  /**
+   * Delete a workspace: drop it, its sidebar listing, and its saved tabs.
+   * Deleting a non-active workspace changes no tabs. Deleting the active
+   * one lands on the first remaining listed workspace (else the first
+   * remaining workspace, else none) through the switch gate, so the
+   * returned plan replaces the open tabs with the fallback's — the deleted
+   * workspace's live tabs are discarded, never saved.
+   */
+  remove(id: WorkspaceId, current?: WorkspaceTabSet): WorkspaceRemovalResult<T> {
+    const index = this.all.findIndex((w) => w.id === id)
+    if (index < 0) throw new Error(`No workspace with id ${id}`)
+    const wasActive = this.active === id
+    this.all.splice(index, 1)
+    const listedIndex = this.listed.indexOf(id)
+    if (listedIndex >= 0) this.listed.splice(listedIndex, 1)
+    this.tabSets.delete(id)
+    if (!wasActive) {
+      this.emit()
+      return { workspace: null, replaceTabs: null }
+    }
+    this.active = null
+    const fallbackId = this.listed[0] ?? this.all[0]?.id ?? null
+    if (fallbackId === null) {
+      this.emit()
+      return { workspace: null, replaceTabs: { closeTabIds: (current?.tabs ?? []).map((t) => t.id), tabs: [], activeTabId: null } }
+    }
+    return this.switchTo(fallbackId, current)
   }
 
   /** Create path: register a new workspace, then switch through the gate. */

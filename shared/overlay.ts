@@ -1,5 +1,6 @@
 import type { Bounds } from './engine'
 import type { Checkpoint, CheckpointId } from '@core/memory/types'
+import type { CompletedOnboarding } from './onboarding'
 
 export type TooltipSide = 'top' | 'right' | 'bottom'
 
@@ -30,6 +31,7 @@ export type SurfaceRequest =
   | { kind: 'memory'; checkpoints: Checkpoint[] }
   | { kind: 'import' }
   | { kind: 'onboarding' }
+  | { kind: 'profile'; completed: CompletedOnboarding | null }
   | {
       kind: 'workspace-menu'
       anchor: Bounds
@@ -45,8 +47,10 @@ export type OverlayAction =
   | { type: 'surface:close'; kind: SurfaceKind }
   | { type: 'memory:navigate'; checkpointId: CheckpointId; target: 'before' | 'after' }
   | { type: 'import:imported' }
+  | { type: 'profile:updated'; completed: CompletedOnboarding }
   | { type: 'workspace:select'; id: string }
   | { type: 'workspace:create'; name: string; goal: string }
+  | { type: 'workspace:delete'; id: string }
 
 /**
  * Floating shell UI that must paint above the native page view. Renderer DOM

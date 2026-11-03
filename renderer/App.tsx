@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useBrowser } from '@/hooks/useBrowser'
 import { useMemory } from '@/hooks/useMemory'
 import { useWorkspaces } from '@/hooks/useWorkspaces'
 import type { CheckpointId, WorkspaceSwitchPlan } from '@core/memory'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { createOnboarding } from '@/features/onboarding/onboarding'
+import { loadOnboarding, updateProfile } from '@/features/onboarding/completeOnboarding'
+import { OnboardingTotemPreview, OnboardingTotemReveal, ProfileIdentityDialog } from '@/features/identity'
+import { createIdentitySpec, type IdentitySpec } from '@core/identity'
+import type { CompletedOnboarding, UpdateProfileInput } from '@shared/onboarding'
 import { ImportLoginsDialog } from '@/components/imports/ImportLoginsDialog'
 import { MemoryDialog, type MemoryNavigateTarget } from '@/components/memory/MemoryDialog'
 import { Sidebar } from '@/components/browser/Sidebar'
 import { TabStrip } from '@/components/browser/TabStrip'
 import { Toolbar } from '@/components/browser/Toolbar'
 import { Viewport } from '@/components/browser/Viewport'
+import { shouldShowStartupRecovery } from '@/components/browser/startupRecovery'
 import { embeddedAgent } from '@/adapters/agent'
 import type { AgentWorkspaceInfo } from '@shared/agent'
 
@@ -43,6 +48,24 @@ export function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(true)
   const onboardingFlow = useRef<ReturnType<typeof createOnboarding> | null>(null)
   if (!onboardingFlow.current) onboardingFlow.current = createOnboarding()
+  // Persisted local profile (SQLite via onboarding persistence) — its
+  // identity seed rebuilds the sidebar totem spec deterministically, and
+  // profile + settings feed the identity influence view in Settings.
+  const [completed, setCompleted] = useState<CompletedOnboarding | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profile = completed?.profile ?? null
+  const refreshProfile = () => void loadOnboarding().then(setCompleted).catch(() => {})
+  /** Save a profile edit; the returned/stored value refreshes the sidebar + dialog at once. */
+  const saveProfile = async (input: UpdateProfileInput): Promise<CompletedOnboarding> => {
+    const updated = await updateProfile(input)
+    setCompleted(updated)
+    return updated
+  }
+  useEffect(refreshProfile, [])
+  const identitySpec: IdentitySpec | null = useMemo(
+    () => (profile?.identitySeed ? createIdentitySpec(profile.identitySeed) : null),
+    [profile?.identitySeed]
+  )
 
   /**
    * Enact a workspace switch: the target workspace's tabs replace the open
@@ -114,6 +137,9 @@ export function App() {
 
   /** Switch workspaces: the target workspace's respective tabs become the open tabs. */
   const selectWorkspace = async (workspaceId: string) => {
+    // A workspace switch means the session is underway: the startup
+    // recovery prompt must never show for (or after) it.
+    setStartupRecovery('ineligible')
     const fromId = ws.activeId
     const target = ws.all.find((w) => w.id === workspaceId)
     const current = currentTabSet()
@@ -127,6 +153,7 @@ export function App() {
 
   /** Create + switch: a new workspace starts empty; the old tabs stay saved under theirs. */
   const createWorkspace = async (name: string, goal: string): Promise<string | null> => {
+    setStartupRecovery('ineligible')
     const fromId = ws.activeId
     const current = currentTabSet()
     const { error, plan, workspaceId } = ws.create(name, goal, current)
@@ -137,6 +164,45 @@ export function App() {
     }
     return error
   }
+
+  /**
+   * Delete a workspace (dropdown trash icon). Deleting a non-active one
+   * leaves the open tabs alone; deleting the active one enacts the board's
+   * fallback plan — the fallback workspace's tabs replace the open array,
+   * or a blank tab when none remain. Returns the now-active id so the
+   * native overlay menu can refresh its rows.
+   */
+  const deleteWorkspace = async (workspaceId: string): Promise<string | null> => {
+    setStartupRecovery('ineligible')
+    const { plan, workspaceId: nextId } = ws.deleteWorkspace(workspaceId, currentTabSet())
+    if (plan) await applySwitch(nextId ?? '', plan)
+    return plan ? nextId : ws.activeId
+  }
+
+  // Startup recovery gate for the recent-switch prompt: evaluated exactly
+  // once, when workspaces have rehydrated at fresh app open. Eligible only
+  // if nothing real is open — neither restored saved tabs nor a live tab
+  // with a URL (the engine's blank startup tab does not count) — and a
+  // checkpoint exists to recover from. Once decided it never re-arms:
+  // workspace switches and real tabs opening end startup permanently, so
+  // the prompt can never appear mid-session (see startupRecovery.ts).
+  const [startupRecovery, setStartupRecovery] = useState<'pending' | 'eligible' | 'ineligible'>('pending')
+  const startupEvaluated = useRef(false)
+  useEffect(() => {
+    if (!ws.ready || startupEvaluated.current) return
+    startupEvaluated.current = true
+    const saved = ws.getTabSet(ws.activeId)
+    const hasOpenTabs = saved.tabs.some((t) => t.url) || tabs.some((t) => t.url)
+    const show = shouldShowStartupRecovery({ atStartup: true, hasOpenTabs, hasCheckpoint: memory.checkpoints.length > 0 })
+    setStartupRecovery(show ? 'eligible' : 'ineligible')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws.ready])
+
+  // Startup ends for good the moment the session is underway: any real tab
+  // opening (including restored saved tabs landing) disarms the prompt.
+  useEffect(() => {
+    if (startupRecovery === 'eligible' && tabs.some((t) => t.url)) setStartupRecovery('ineligible')
+  }, [tabs, startupRecovery])
 
   // Once workspaces are rehydrated from the local database, restore the
   // active workspace's saved tabs (replacing the blank startup tab) — once.
@@ -153,6 +219,7 @@ export function App() {
 
   /** Navigate to one side of a checkpoint, replacing the current tab array. */
   const navigateMemory = async (checkpointId: CheckpointId, target: MemoryNavigateTarget) => {
+    setStartupRecovery('ineligible')
     const checkpoint = memory.checkpoints.find((c) => c.id === checkpointId)
     if (!checkpoint) return
     // Navigating Before marks the checkpoint restored; After goes through the
@@ -184,8 +251,8 @@ export function App() {
 
   // --- Native overlay surfaces -------------------------------------------------
   // Latest callbacks for the (once-registered) overlay action handler.
-  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, reloadActive: () => id && engine.reload(id) })
-  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, reloadActive: () => id && engine.reload(id) }
+  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, reloadActive: () => id && engine.reload(id) })
+  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, reloadActive: () => id && engine.reload(id) }
 
   useEffect(() => {
     if (!nativeOverlay) return
@@ -196,7 +263,8 @@ export function App() {
           window.dispatchEvent(new CustomEvent('magic:surface-closed', { detail: action.kind }))
           if (action.kind === 'memory') setMemoryOpen(false)
           if (action.kind === 'import') setImportOpen(false)
-          if (action.kind === 'onboarding') setOnboardingOpen(false)
+          if (action.kind === 'profile') setProfileOpen(false)
+          if (action.kind === 'onboarding') (setOnboardingOpen(false), refreshProfile())
           return null
         case 'memory:navigate':
           await h.navigateMemory(action.checkpointId, action.target)
@@ -204,11 +272,16 @@ export function App() {
         case 'import:imported':
           h.reloadActive()
           return null
+        case 'profile:updated':
+          setCompleted(action.completed)
+          return null
         case 'workspace:select':
           await h.selectWorkspace(action.id)
           return null
         case 'workspace:create':
           return h.createWorkspace(action.name, action.goal)
+        case 'workspace:delete':
+          return h.deleteWorkspace(action.id)
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,15 +293,16 @@ export function App() {
     if (!nativeOverlay) return
     if (memoryOpen) nativeOverlay.showSurface({ kind: 'memory', checkpoints: memory.checkpoints })
     else if (importOpen) nativeOverlay.showSurface({ kind: 'import' })
+    else if (profileOpen) nativeOverlay.showSurface({ kind: 'profile', completed })
     else if (onboardingOpen) nativeOverlay.showSurface({ kind: 'onboarding' })
-  }, [nativeOverlay, memoryOpen, importOpen, onboardingOpen, memory.checkpoints])
+  }, [nativeOverlay, memoryOpen, importOpen, profileOpen, completed, onboardingOpen, memory.checkpoints])
 
   // A dialog closed from the shell side (e.g. Memory navigation) must also
   // leave the native overlay. The workspace menu is not driven by these
   // flags, and this only runs when they change, so it cannot hide it.
   useEffect(() => {
-    if (nativeOverlay && !memoryOpen && !importOpen && !onboardingOpen) nativeOverlay.hideSurface()
-  }, [nativeOverlay, memoryOpen, importOpen, onboardingOpen])
+    if (nativeOverlay && !memoryOpen && !importOpen && !profileOpen && !onboardingOpen) nativeOverlay.hideSurface()
+  }, [nativeOverlay, memoryOpen, importOpen, profileOpen, onboardingOpen])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -250,15 +324,16 @@ export function App() {
         onWidthChange={syncHeaderInset}
         onMemory={() => setMemoryOpen(true)}
         memoryCount={memory.checkpoints.length}
-        onSettings={() => setImportOpen(true)}
+        onSettings={() => setProfileOpen(true)}
+        profile={profile ? { displayName: profile.displayName, identity: identitySpec } : null}
         ws={ws}
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createWorkspace}
+        onDeleteWorkspace={deleteWorkspace}
       />
-      {/* Page area sits on the chrome background as an inset, layered card
-          (see Viewport), with the same bottom/right gutter it had before
-          the restyle made everything flush with the panel. */}
-      <main className="relative flex min-w-0 flex-1 flex-col pb-2 pr-2">
+      {/* Page area is flush with the panel edge and the window's right and
+          bottom edges — no gutter or inset card around the page. */}
+      <main className="relative flex min-w-0 flex-1 flex-col">
         {/* Traffic lights occupy the top-left ~68px of the window, over the
             sidebar's reserved drag strip. The rail (52px) is narrower than
             that, so on the rail the header pads tabs clear of them. */}
@@ -289,11 +364,13 @@ export function App() {
         {/* Dialogs/dropdowns live in the native overlay layer above the
             page view (see overlay effects above), so the page stays live
             and attached underneath them at all times. */}
-        {/* Blank tabs offer to pick up the most recent switch (newest Memory
-            checkpoint): restoring its Before reopens the tabs left behind. */}
+        {/* Startup recovery only: at fresh app open with no tabs open, offer
+            to pick up the most recent switch (newest Memory checkpoint);
+            restoring its Before reopens the tabs left behind. Mid-session
+            blank tabs never get the prompt (startupRecovery gate above). */}
         <Viewport
           tab={activeTab}
-          resume={memory.checkpoints[0] ?? null}
+          resume={startupRecovery === 'eligible' ? (memory.checkpoints[0] ?? null) : null}
           onResume={() => {
             const latest = memory.checkpoints[0]
             if (latest) void navigateMemory(latest.id, 'before')
@@ -306,7 +383,17 @@ export function App() {
             flow={onboardingFlow.current}
             open={onboardingOpen}
             onClose={() => setOnboardingOpen(false)}
+            onComplete={refreshProfile}
             title="Welcome to Magic"
+            renderPreview={(data, progress) => <OnboardingTotemPreview data={data} progress={progress} />}
+            renderCompletion={(data) => <OnboardingTotemReveal data={data} />}
+          />
+          <ProfileIdentityDialog
+            open={profileOpen}
+            completed={completed}
+            onClose={() => setProfileOpen(false)}
+            onImportLogins={() => (setProfileOpen(false), setImportOpen(true))}
+            onSaveProfile={saveProfile}
           />
           <MemoryDialog open={memoryOpen} checkpoints={memory.checkpoints} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
           <ImportLoginsDialog
