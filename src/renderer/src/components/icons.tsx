@@ -29,3 +29,5 @@ export const User = base(<><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13.5c
 export const Briefcase = base(<><rect x="2.5" y="5" width="11" height="8" rx="1.5" /><path d="M6 5V3.8c0-.4.3-.8.8-.8h2.4c.5 0 .8.4.8.8V5M2.5 8.5h11" /></>)
 export const GradCap = base(<><path d="M8 3 1.5 6 8 9l6.5-3Z" /><path d="M4.5 7.5v3c1 1 2.2 1.5 3.5 1.5s2.5-.5 3.5-1.5v-3" /></>)
 export const ChevronUpDown = base(<path d="m5.5 6 2.5-2.5L10.5 6m-5 4 2.5 2.5 2.5-2.5" />)
+export const Pencil = base(<path d="M11.3 2.9a1.6 1.6 0 0 1 2.3 2.3L5.4 13.4 2.5 14l.6-2.9Z" />)
+export const Sparkles = base(<><path d="M8 2.5 9.3 6 13 7.3 9.3 8.6 8 12.5 6.7 8.6 3 7.3 6.7 6Z" /><path d="M12.5 10.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6Z" /></>)

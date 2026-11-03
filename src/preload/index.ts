@@ -3,6 +3,7 @@ import { IPC, type BrowserEngine, type EngineCommand, type EngineSnapshot } from
 import { IMPORT_IPC, type LoginImporter } from '@shared/import'
 import { OVERLAY_IPC, type ShellOverlay } from '@shared/overlay'
 import { WORKSPACE_IPC, type WorkspacePersistence } from '@shared/workspaces'
+import { ONBOARDING_IPC, type OnboardingPersistence } from '@shared/onboarding'
 
 const call =
   <C extends EngineCommand>(command: C) =>
@@ -48,6 +49,12 @@ const workspaces: WorkspacePersistence = {
   listSwitches: (limit) => ipcRenderer.invoke(WORKSPACE_IPC.listSwitches, limit)
 }
 
+const onboarding: OnboardingPersistence = {
+  completeOnboarding: (input) => ipcRenderer.invoke(ONBOARDING_IPC.complete, input),
+  loadOnboarding: () => ipcRenderer.invoke(ONBOARDING_IPC.load)
+}
+
+contextBridge.exposeInMainWorld('onboarding', onboarding)
 contextBridge.exposeInMainWorld('workspaces', workspaces)
 contextBridge.exposeInMainWorld('engine', engine)
 contextBridge.exposeInMainWorld('importer', importer)
