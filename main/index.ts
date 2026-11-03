@@ -9,6 +9,8 @@ import { SqliteWorkspaceStore } from './db/workspace-db'
 import { TooltipOverlay } from './browser/tooltip-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
 import { ONBOARDING_IPC, type CompleteOnboardingInput } from '@shared/onboarding'
+import { AGENT_IPC, type WorkspaceSwitchNotice } from '@shared/agent'
+import { EmbeddedAgentHost } from './agent/host'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -17,6 +19,7 @@ app.commandLine.appendSwitch('ignore-gpu-blocklist')
 
 const engines = new Map<number, ElectronEngine>()
 const tooltips = new Map<number, TooltipOverlay>()
+const agentHosts = new Map<number, EmbeddedAgentHost>()
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -27,7 +30,9 @@ function createWindow(): void {
     show: false,
     title: 'Magic',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
+    // Centred in the renderer's reserved 44px titlebar strip (Sidebar's
+    // drag strip / App's header), which no visible element enters.
+    trafficLightPosition: { x: 14, y: 16 },
     vibrancy: 'sidebar',
     visualEffectState: 'followWindow',
     backgroundColor: '#00000000',
@@ -41,6 +46,7 @@ function createWindow(): void {
   const engine = new ElectronEngine(win)
   const wcId = win.webContents.id
   engines.set(wcId, engine)
+  agentHosts.set(wcId, new EmbeddedAgentHost({ appRoot: app.getAppPath(), engine, log: (m) => console.log(m) }))
   tooltips.set(wcId, new TooltipOverlay(win))
   engine.subscribe((s) => !win.isDestroyed() && win.webContents.send(IPC.snapshot, s))
   void engine.createTab()
@@ -49,6 +55,8 @@ function createWindow(): void {
   win.on('closed', () => {
     engine.dispose()
     engines.delete(wcId)
+    void agentHosts.get(wcId)?.dispose()
+    agentHosts.delete(wcId)
     tooltips.get(wcId)?.dispose()
     tooltips.delete(wcId)
   })
@@ -79,6 +87,14 @@ ipcMain.handle(WORKSPACE_IPC.upsert, (_e, record: Parameters<SqliteWorkspaceStor
 ipcMain.handle(WORKSPACE_IPC.recordSwitch, (_e, input: RecordSwitchInput) => workspaces().recordSwitch(input))
 ipcMain.handle(WORKSPACE_IPC.saveTabSet, (_e, workspaceId: string, tabSet: PersistedTabSet) => workspaces().saveTabSet(workspaceId, tabSet))
 ipcMain.handle(WORKSPACE_IPC.listSwitches, (_e, limit?: number) => workspaces().listSwitches(limit))
+
+// Embedded agent: a workspace switch runs the agent against the new
+// workspace (see main/agent/host.ts). Fails soft — never blocks switching.
+ipcMain.handle(AGENT_IPC.workspaceSwitched, (e, notice: WorkspaceSwitchNotice) => {
+  const host = agentHosts.get(e.sender.id)
+  if (!host) return { status: 'skipped', reply: null, reason: 'No agent host for this window' }
+  return host.workspaceSwitched(notice)
+})
 
 ipcMain.handle(ONBOARDING_IPC.complete, (_e, input: CompleteOnboardingInput) => workspaces().completeOnboarding(input))
 ipcMain.handle(ONBOARDING_IPC.load, () => workspaces().loadOnboarding())

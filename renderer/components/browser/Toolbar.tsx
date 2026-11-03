@@ -16,7 +16,7 @@ interface Props {
 
 export function Toolbar({ tab, onBack, onForward, onReload, onStop, onNavigate, onPreconnect }: Props) {
   return (
-    <div className="relative mb-2 flex h-10 items-center gap-0.5 px-1">
+    <div className="relative mb-1.5 flex h-9 items-center gap-0.5">
       <LoadingBar loading={!!tab?.isLoading} />
       <IconButton tip="Back" tipSide="top" disabled={!tab?.canGoBack} onClick={onBack}><ChevronLeft /></IconButton>
       <IconButton tip="Forward" tipSide="top" disabled={!tab?.canGoForward} onClick={onForward}><ChevronRight /></IconButton>

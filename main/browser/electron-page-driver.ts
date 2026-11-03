@@ -1,7 +1,7 @@
 import type { WebContents } from 'electron'
 import type { TabId } from '@shared/engine'
-import type { PageContent, PageDriver, PageElement } from '@agent/tools/ports'
-import { ToolError } from '@agent/tools/types'
+import type { PageContent, PageDriver, PageElement } from '@agent/lib/tools/ports'
+import { ToolError } from '@agent/lib/tools/types'
 
 const ATTRS = ['id', 'name', 'type', 'href', 'value', 'placeholder', 'aria-label', 'role', 'title', 'alt']
 
