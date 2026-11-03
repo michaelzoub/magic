@@ -1,12 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./src/renderer/index.html', './src/renderer/**/*.{ts,tsx}'],
+  content: ['./renderer/index.html', './renderer/**/*.{ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'Inter', 'system-ui', 'sans-serif']
       },
       colors: {
+        brand: 'rgb(var(--brand) / <alpha-value>)',
         chrome: {
           bg: 'rgb(var(--chrome-bg) / <alpha-value>)',
           panel: 'rgb(var(--chrome-panel) / <alpha-value>)',

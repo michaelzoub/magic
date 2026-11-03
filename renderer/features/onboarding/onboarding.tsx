@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { composeGoalWithSites, OnboardingFlow, type OnboardingData } from '@core/onboarding'
 import type { CompletedOnboarding } from '@shared/onboarding'
 import { uiStep, type OnboardingStepProps } from '@/features/onboarding/OnboardingWizard'
-import { Check, Close, Globe, Pencil, Plus, Sparkles, User } from '@/components/ui/icons'
+import { Check, Close, Globe, Pencil, Plus, User } from '@/components/ui/icons'
+import { Brand } from '@/components/ui/Brand'
 import { completeOnboarding } from './completeOnboarding'
 
 /** Answers collected by the first step, saved under the `welcome` step id. */
@@ -19,7 +20,7 @@ function WelcomeStep({ value, setValue }: OnboardingStepProps<WelcomeAnswers>) {
   const update = (patch: Partial<WelcomeAnswers>) => setValue({ ...answers, ...patch })
   return (
     <div className="relative">
-      <Sparkles className="absolute right-0 top-0 text-white/40" width={20} height={20} />
+      <Brand size={22} className="mb-4 text-white" />
       <h3 className="pr-8 text-[20px] font-semibold leading-snug tracking-tight">Hey there! Welcome to Magic!</h3>
       <p className="mt-1.5 text-[13px] text-white/50">To get started, what would you like to be referred to as?</p>
 
