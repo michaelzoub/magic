@@ -9,10 +9,12 @@ import { surface } from './surface'
  * click or Escape. Rendered above the chrome; callers must hide the native
  * page view while open, since it paints above renderer DOM.
  */
-export function Dialog({ open, onClose, label, children }: {
+export function Dialog({ open, onClose, label, hideHeader = false, children }: {
   open: boolean
   onClose(): void
   label: string
+  /** Hide the title/close header row (the content provides its own heading); `label` still names the dialog. */
+  hideHeader?: boolean
   children: ReactNode
 }) {
   useEffect(() => {
@@ -34,17 +36,19 @@ export function Dialog({ open, onClose, label, children }: {
         aria-label={label}
         className={`flex max-h-full w-[min(680px,100%)] flex-col overflow-hidden rounded-[12px] animate-[pop-in_120ms_ease-out] ${surface}`}
       >
-        <header className="flex items-center gap-2 px-4 pb-2 pt-3.5">
-          <h2 className="flex-1 text-[13px] font-semibold">{label}</h2>
-          <button
-            type="button"
-            aria-label="Close dialog"
-            onClick={onClose}
-            className="grid h-7 w-7 place-items-center rounded-[6px] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white"
-          >
-            <Close width={14} height={14} />
-          </button>
-        </header>
+        {!hideHeader && (
+          <header className="flex items-center gap-2 px-4 pb-2 pt-3.5">
+            <h2 className="flex-1 text-[13px] font-semibold">{label}</h2>
+            <button
+              type="button"
+              aria-label="Close dialog"
+              onClick={onClose}
+              className="grid h-7 w-7 place-items-center rounded-[6px] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <Close width={14} height={14} />
+            </button>
+          </header>
+        )}
         {children}
       </div>
     </div>

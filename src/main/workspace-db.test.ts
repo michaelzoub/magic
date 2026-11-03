@@ -103,6 +103,47 @@ describe('SqliteWorkspaceStore', () => {
     store.close()
   })
 
+  it('saves the onboarding profile + initial settings atomically and persists across reopen', () => {
+    let store = new SqliteWorkspaceStore(file)
+    expect(store.loadOnboarding()).toBeNull()
+    const done = store.completeOnboarding({
+      profile: { displayName: 'Ada', goal: 'Focus' },
+      settings: { defaultGoal: 'Focus', theme: 'dark' },
+      completedAt: 1000
+    })
+    expect(done.profile).toEqual({
+      displayName: 'Ada', goal: 'Focus', onboardingCompletedAt: 1000, createdAt: 1000, updatedAt: 1000
+    })
+    expect(done.settings).toEqual({ defaultGoal: 'Focus', theme: 'dark' })
+    store.close()
+
+    store = new SqliteWorkspaceStore(file)
+    expect(store.loadOnboarding()).toEqual(done)
+    store.close()
+  })
+
+  it('re-running onboarding updates the profile but never clobbers existing settings or first completion', () => {
+    const store = new SqliteWorkspaceStore(file)
+    store.completeOnboarding({
+      profile: { displayName: 'Ada', goal: 'Focus' },
+      settings: { defaultGoal: 'Focus', theme: 'dark' },
+      completedAt: 1000
+    })
+    const again = store.completeOnboarding({
+      profile: { displayName: 'Ada Lovelace', goal: 'Research' },
+      settings: { defaultGoal: 'Research', theme: 'light', extra: true },
+      completedAt: 2000
+    })
+    expect(again.profile).toEqual({
+      displayName: 'Ada Lovelace', goal: 'Research',
+      onboardingCompletedAt: 1000, createdAt: 1000, updatedAt: 2000
+    })
+    // theme/defaultGoal kept their seeded values; only the new key was added.
+    expect(again.settings).toEqual({ defaultGoal: 'Focus', theme: 'dark', extra: true })
+    expect(() => store.completeOnboarding({ profile: { displayName: ' ', goal: '' }, settings: {} })).toThrow(/display name/)
+    store.close()
+  })
+
   it('saves the outgoing workspace tabs with the switch and restores them on load', () => {
     const store = new SqliteWorkspaceStore(file)
     store.upsertWorkspace(ws('personal', 'Personal'))

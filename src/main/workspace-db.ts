@@ -6,6 +6,7 @@ import type {
   WorkspaceSwitchRecord,
   RecordSwitchInput
 } from '@shared/workspaces'
+import type { CompletedOnboarding, CompleteOnboardingInput, InitialSettings, UserProfile } from '@shared/onboarding'
 
 type UpsertInput = Parameters<import('@shared/workspaces').WorkspacePersistence['upsertWorkspace']>[0]
 
@@ -71,7 +72,33 @@ CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_profile (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  display_name TEXT NOT NULL,
+  goal TEXT NOT NULL DEFAULT '',
+  onboarding_completed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `
+
+interface ProfileRow {
+  display_name: string
+  goal: string
+  onboarding_completed_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+interface SettingRow {
+  key: string
+  value: string
+}
 
 const toRecord = (r: WorkspaceRow): WorkspaceRecord => ({
   id: r.id,
@@ -214,6 +241,60 @@ export class SqliteWorkspaceStore {
       this.db.exec('ROLLBACK')
       throw e
     }
+  }
+
+  /**
+   * Complete onboarding: upsert the singleton user profile and seed the
+   * initial settings in one transaction. Settings are only seeded where
+   * no value exists yet, so re-running onboarding updates the profile
+   * without clobbering settings the user changed afterwards. The first
+   * completion timestamp (and created_at) is preserved on re-runs.
+   */
+  completeOnboarding(input: CompleteOnboardingInput): CompletedOnboarding {
+    const displayName = input.profile.displayName?.trim()
+    if (!displayName) throw new Error('Profile display name is required')
+    const completedAt = input.completedAt ?? Date.now()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO user_profile (id, display_name, goal, onboarding_completed_at, created_at, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             display_name = excluded.display_name, goal = excluded.goal,
+             onboarding_completed_at = COALESCE(user_profile.onboarding_completed_at, excluded.onboarding_completed_at),
+             updated_at = excluded.updated_at`
+        )
+        .run(displayName, input.profile.goal ?? '', completedAt, completedAt, completedAt)
+      const seedSetting = this.db.prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO NOTHING`
+      )
+      for (const [key, value] of Object.entries(input.settings)) {
+        seedSetting.run(key, JSON.stringify(value), completedAt)
+      }
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+    return this.loadOnboarding()!
+  }
+
+  loadOnboarding(): CompletedOnboarding | null {
+    const row = this.db.prepare('SELECT * FROM user_profile WHERE id = 1').get() as unknown as ProfileRow | undefined
+    if (!row) return null
+    const profile: UserProfile = {
+      displayName: row.display_name,
+      goal: row.goal,
+      onboardingCompletedAt: row.onboarding_completed_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+    const settings: InitialSettings = {}
+    const rows = this.db.prepare('SELECT key, value FROM app_settings ORDER BY key').all() as unknown as SettingRow[]
+    for (const s of rows) settings[s.key] = JSON.parse(s.value)
+    return { profile, settings }
   }
 
   listSwitches(limit = 100): WorkspaceSwitchRecord[] {

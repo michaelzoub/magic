@@ -3,6 +3,8 @@ import { useBrowser } from '@/engine/useBrowser'
 import { useMemory } from '@/engine/useMemory'
 import { useWorkspaces } from '@/engine/useWorkspaces'
 import type { CheckpointId, WorkspaceSwitchPlan } from '../../core/memory'
+import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
+import { createOnboarding } from '@/onboarding/onboarding'
 import { ImportLoginsDialog } from '@/components/ImportLoginsDialog'
 import { MemoryDialog, type MemoryNavigateTarget } from '@/components/MemoryDialog'
 import { RAIL, Sidebar } from '@/components/Sidebar'
@@ -22,6 +24,12 @@ export function App() {
   const [importOpen, setImportOpen] = useState(false)
   const ws = useWorkspaces()
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  // Redo onboarding on every app open/reload (for now): a fresh flow on
+  // every mount, open immediately regardless of any previously saved
+  // profile. Closing finishes/dismisses it until the next reload.
+  const [onboardingOpen, setOnboardingOpen] = useState(true)
+  const onboardingFlow = useRef<ReturnType<typeof createOnboarding> | null>(null)
+  if (!onboardingFlow.current) onboardingFlow.current = createOnboarding()
 
   /**
    * Enact a workspace switch: the target workspace's tabs replace the open
@@ -175,8 +183,14 @@ export function App() {
             dropdown/dialog that extends over the page area is open — notably
             the workspace dropdown from the collapsed rail. Viewport shows a
             still capture of the page meanwhile, so the site stays visible. */}
-        <Viewport tab={activeTab} hidden={memoryOpen || importOpen || workspaceMenuOpen} />
+        <Viewport tab={activeTab} hidden={memoryOpen || importOpen || workspaceMenuOpen || onboardingOpen} />
       </main>
+      <OnboardingWizard
+        flow={onboardingFlow.current}
+        open={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+        title="Welcome to Magic"
+      />
       <MemoryDialog open={memoryOpen} memory={memory} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
       <ImportLoginsDialog
         open={importOpen}

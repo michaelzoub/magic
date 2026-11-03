@@ -8,6 +8,7 @@ import { ElectronEngine } from './electron-engine'
 import { SqliteWorkspaceStore } from './workspace-db'
 import { TooltipOverlay } from './tooltip-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
+import { ONBOARDING_IPC, type CompleteOnboardingInput } from '@shared/onboarding'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -77,6 +78,9 @@ ipcMain.handle(WORKSPACE_IPC.upsert, (_e, record: Parameters<SqliteWorkspaceStor
 ipcMain.handle(WORKSPACE_IPC.recordSwitch, (_e, input: RecordSwitchInput) => workspaces().recordSwitch(input))
 ipcMain.handle(WORKSPACE_IPC.saveTabSet, (_e, workspaceId: string, tabSet: PersistedTabSet) => workspaces().saveTabSet(workspaceId, tabSet))
 ipcMain.handle(WORKSPACE_IPC.listSwitches, (_e, limit?: number) => workspaces().listSwitches(limit))
+
+ipcMain.handle(ONBOARDING_IPC.complete, (_e, input: CompleteOnboardingInput) => workspaces().completeOnboarding(input))
+ipcMain.handle(ONBOARDING_IPC.load, () => workspaces().loadOnboarding())
 
 ipcMain.handle(IMPORT_IPC.detect, () => detectSources())
 ipcMain.handle(IMPORT_IPC.importLogins, (_e, sourceId: string) => importLogins(session.defaultSession, sourceId))
