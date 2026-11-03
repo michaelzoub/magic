@@ -19,6 +19,13 @@ export const motion = {
     gsap.fromTo(el, { opacity: 0, y: 3, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, clearProps: 'transform' })
   },
 
+  /** Kill any tween on `el` (e.g. tabIn) so it stops fighting a drag. */
+  stop(el: Element | null | undefined) {
+    if (!el) return
+    gsap.killTweensOf(el)
+    gsap.set(el, { clearProps: 'transform,opacity' })
+  },
+
   fadeIn(el: Element, delay = 0) {
     if (!ok()) return
     gsap.fromTo(el, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.24, delay, ease: 'expo.out' })
@@ -27,6 +34,32 @@ export const motion = {
   press(el: Element) {
     if (!ok()) return
     gsap.fromTo(el, { scale: 0.92 }, { scale: 1, duration: 0.22, ease: 'expo.out', overwrite: true })
+  },
+
+  /**
+   * Side-panel resize: a short (240ms) GSAP width tween in small per-frame
+   * pixel steps, `power3.out` so it responds instantly and settles softly.
+   * Animating the aside's width (layout, deliberately — the one exception
+   * to the transform-only rule above) drives the flex page area beside it,
+   * whose ResizeObserver re-reports the native page bounds each frame, so
+   * the page follows the panel instead of jumping in one frame. Returns
+   * null under reduced motion, after snapping to the final width.
+   */
+  panelWidth(el: Element, to: number, onUpdate: (width: number) => void, onComplete: () => void) {
+    if (!ok()) {
+      gsap.set(el, { width: to })
+      onUpdate(to)
+      onComplete()
+      return null
+    }
+    return gsap.to(el, {
+      width: to,
+      duration: 0.24,
+      ease: 'power3.out',
+      overwrite: true,
+      onUpdate: () => onUpdate(Number(gsap.getProperty(el, 'width'))),
+      onComplete
+    })
   },
 
   /** Indeterminate-feeling progress: eases toward 85%, completes on stop. */

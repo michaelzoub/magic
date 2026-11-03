@@ -30,6 +30,14 @@ export function createMemoryEngine(): BrowserEngine {
       if (!tabs.length) await engine.createTab()
     },
     activateTab: async (id) => set({ ...snap, activeTabId: id }),
+    async moveTab(id, toIndex) {
+      const from = snap.tabs.findIndex((t) => t.id === id)
+      if (from < 0) return
+      const tabs = [...snap.tabs]
+      const [tab] = tabs.splice(from, 1)
+      tabs.splice(Math.min(Math.max(toIndex, 0), tabs.length), 0, tab)
+      set({ ...snap, tabs })
+    },
     // No live pages to keep: always replace the tab array.
     async switchWorkspace(_workspaceId, tabs, activeIndex) {
       const old = snap.tabs.map((t) => t.id)
@@ -46,7 +54,6 @@ export function createMemoryEngine(): BrowserEngine {
     goForward: noop,
     reload: noop,
     stop: noop,
-    capturePage: async () => null,
     preconnect: () => {},
     setViewportBounds: () => {}
   }

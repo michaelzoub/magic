@@ -10,9 +10,10 @@ const place: Record<Placement, string> = {
 }
 
 /**
- * Anchored floating panel. Render it inside a `relative` wrapper next to its
- * trigger; it closes on outside pointerdown or Escape. Placement must avoid the
- * native page view, which paints above the renderer.
+ * Anchored floating panel, plain-browser fallback. Render it inside a
+ * `relative` wrapper next to its trigger; it closes on outside pointerdown
+ * or Escape. In Electron, dropdowns render in the native overlay view
+ * instead (see renderer/overlay), which composites above the page view.
  */
 export function Popover({ open, onClose, placement = 'bottom-start', label, children }: {
   open: boolean

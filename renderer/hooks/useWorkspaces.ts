@@ -15,6 +15,8 @@ const ICONS: Record<string, IconComponent> = {
   layers: Layers
 }
 const iconFor = (key: string): IconComponent => ICONS[key] ?? Layers
+/** Icon component for a persisted workspace icon key (used by the native overlay menu too). */
+export const workspaceIcon = iconFor
 
 export type Workspace = {
   id: string
