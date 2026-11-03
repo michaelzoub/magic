@@ -16,7 +16,9 @@
       "react/jsx-runtime": ["./node_modules/preact/jsx-runtime"],
       "react-dom/client": ["./node_modules/preact/compat/client"],
       "@shared/*": ["./src/shared/*"],
-      "@/*": ["./src/renderer/src/*"]
+      "@core/*": ["./src/core/*"],
+      "@agent/*": ["./src/agent/*"],
+      "@/*": ["./src/renderer/*"]
     }
   },
   "include": ["src", "electron.vite.config.ts"]

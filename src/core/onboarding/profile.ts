@@ -1,4 +1,4 @@
-import type { CompleteOnboardingInput, InitialSettings, SettingValue } from '../../shared/onboarding'
+import type { CompleteOnboardingInput, InitialSettings, SettingValue } from '@shared/onboarding'
 import type { OnboardingData } from './types'
 
 /**
