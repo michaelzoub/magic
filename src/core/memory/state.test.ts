@@ -47,7 +47,7 @@ describe('recordReorg', () => {
     // The map target is fetchable from the workspace table and becomes active.
     const browser = createBrowserState()
     const controller = new BrowserController(browser)
-    controller.create({ id: 'code-focus', name: 'Code Focus Mode' })
+    controller.create({ id: 'code-focus', name: 'Code Focus Mode', description: '' })
     controller.switchTo(getTransitionTarget(state, 'before-1')!)
     expect(browser.activeWorkspaceId).toBe('code-focus')
     expect(controller.get('code-focus')?.name).toBe('Code Focus Mode')

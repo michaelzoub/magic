@@ -38,8 +38,8 @@ function ctx(overrides: Partial<ToolContext> = {}): ToolContext {
 
 function workspaceCtx(): ToolContext {
   const store = new BrowserStore()
-  store.create({ id: 'w1', name: 'Work' })
-  store.create({ id: 'w2', name: 'Home' })
+  store.create({ id: 'w1', name: 'Work', description: '' })
+  store.create({ id: 'w2', name: 'Home', description: '' })
   store.assign('a', 'w1')
   store.assign('b', 'w2')
   return ctx({ store })

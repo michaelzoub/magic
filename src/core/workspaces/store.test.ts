@@ -15,8 +15,8 @@ describe('BrowserState', () => {
   it('normalizes initial state so invariants hold', () => {
     const s = createBrowserState({
       workspaces: [
-        { id: 'w1', name: 'A', sites: new Map() },
-        { id: 'w2', name: 'B', sites: new Map() }
+        { id: 'w1', name: 'A', description: '', sites: new Map() },
+        { id: 'w2', name: 'B', description: '', sites: new Map() }
       ],
       activeWorkspaceId: 'missing',
       assignments: [
@@ -32,10 +32,10 @@ describe('BrowserState', () => {
 describe('BrowserController', () => {
   it('creates workspaces; the first becomes active', () => {
     const c = new BrowserController(state())
-    const w1 = c.create({ name: 'Work' })
+    const w1 = c.create({ name: 'Work', description: '' })
     expect(w1.id).toBeTruthy()
     expect(c.getActive()?.id).toBe(w1.id)
-    const w2 = c.create({ id: 'w2', name: 'Home' })
+    const w2 = c.create({ id: 'w2', name: 'Home', description: '' })
     expect(w2.id).toBe('w2')
     expect(c.getActive()?.id).toBe(w1.id)
     expect(c.list().map((w) => w.name)).toEqual(['Work', 'Home'])
@@ -43,16 +43,16 @@ describe('BrowserController', () => {
 
   it('rejects blank, duplicate, and duplicate-id workspaces', () => {
     const c = new BrowserController(state())
-    c.create({ id: 'w1', name: 'Work' })
-    expect(() => c.create({ name: '  ' })).toThrow()
-    expect(() => c.create({ name: ' work ' })).toThrow()
-    expect(() => c.create({ id: 'w1', name: 'Other' })).toThrow()
+    c.create({ id: 'w1', name: 'Work', description: '' })
+    expect(() => c.create({ name: '  ', description: '' })).toThrow()
+    expect(() => c.create({ name: ' work ', description: '' })).toThrow()
+    expect(() => c.create({ id: 'w1', name: 'Other', description: '' })).toThrow()
   })
 
   it('switches the active workspace and rejects unknown ids', () => {
     const c = new BrowserController(state())
-    c.create({ id: 'w1', name: 'A' })
-    c.create({ id: 'w2', name: 'B' })
+    c.create({ id: 'w1', name: 'A', description: '' })
+    c.create({ id: 'w2', name: 'B', description: '' })
     c.switchTo('w2')
     expect(c.getActive()?.id).toBe('w2')
     expect(() => c.switchTo('nope')).toThrow()
@@ -60,8 +60,8 @@ describe('BrowserController', () => {
 
   it('assigns, moves, and unassigns tabs without touching probabilities', () => {
     const c = new BrowserController(state())
-    c.create({ id: 'w1', name: 'A' })
-    c.create({ id: 'w2', name: 'B' })
+    c.create({ id: 'w1', name: 'A', description: '' })
+    c.create({ id: 'w2', name: 'B', description: '' })
     c.setSite('w1', 'github.com', 0.8)
     c.assign('t1', 'w1')
     expect(c.getWorkspaceForTab('t1')).toBe('w1')
@@ -80,8 +80,8 @@ describe('BrowserController', () => {
 
   it('tracks site probabilities and matches across workspaces', () => {
     const c = new BrowserController(state())
-    c.create({ id: 'w1', name: 'A' })
-    c.create({ id: 'w2', name: 'B' })
+    c.create({ id: 'w1', name: 'A', description: '' })
+    c.create({ id: 'w2', name: 'B', description: '' })
     expect(c.getSite('w1', 'github.com')).toBe(0)
     c.setSite('w1', 'github.com', 0.4)
     c.setSite('w2', 'github.com', 0.9)
@@ -103,12 +103,12 @@ describe('BrowserStore', () => {
     const store = new BrowserStore()
     const seen: Array<string | null> = []
     const unsub = store.subscribe((s) => seen.push(s.activeWorkspaceId))
-    store.create({ id: 'w1', name: 'A' })
+    store.create({ id: 'w1', name: 'A', description: '' })
     store.list()
     store.get('w1')
     expect(seen).toEqual(['w1'])
     unsub()
-    store.create({ id: 'w2', name: 'B' })
+    store.create({ id: 'w2', name: 'B', description: '' })
     expect(seen).toEqual(['w1'])
   })
 
@@ -121,7 +121,7 @@ describe('BrowserStore', () => {
       }
     }
     const store = new BrowserStore({ storage })
-    store.create({ id: 'w1', name: 'A' })
+    store.create({ id: 'w1', name: 'A', description: '' })
     store.assign('t1', 'w1')
     expect(saves.length).toBe(2)
     expect(saves[0]!.assignments).toEqual([])
@@ -138,13 +138,13 @@ describe('BrowserStore', () => {
         }
       }
     })
-    expect(() => store.create({ name: 'A' })).not.toThrow()
+    expect(() => store.create({ name: 'A', description: '' })).not.toThrow()
     expect(store.list().length).toBe(1)
   })
 
   it('rehydrates from storage', async () => {
     const saved = createBrowserState()
-    new BrowserController(saved).create({ id: 'w1', name: 'A' })
+    new BrowserController(saved).create({ id: 'w1', name: 'A', description: '' })
     const storage: BrowserStorage = { load: async () => saved, save: vi.fn() }
     const store = await BrowserStore.load(storage)
     expect(store.getState().activeWorkspaceId).toBe('w1')

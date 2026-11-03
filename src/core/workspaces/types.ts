@@ -15,6 +15,8 @@ export interface Workspace {
   id: WorkspaceId
   /** Unique across workspaces (compared trimmed, case-insensitive). */
   name: string
+  /** What this workspace is for, e.g. "Side projects and open source". */
+  description: string
   /** How likely each site is to be used in this workspace, e.g. github.com → 0.8. */
   sites: SiteMap
 }
@@ -33,6 +35,7 @@ export interface TabAssignment {
 
 export interface CreateWorkspaceInput {
   name: string
+  description: string
   /** Optional caller-supplied id; otherwise the implementation generates one. */
   id?: WorkspaceId
   /** Optional initial site probabilities; defaults to empty. */

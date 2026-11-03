@@ -68,7 +68,7 @@ export class BrowserController {
     const id = input.id ?? crypto.randomUUID()
     if (!id) throw new Error('Workspace id is required')
     if (this.get(id)) throw new Error(`Workspace id "${id}" already exists`)
-    const workspace: Workspace = { id, name, sites: new Map(input.sites ?? []) }
+    const workspace: Workspace = { id, name, description: input.description.trim(), sites: new Map(input.sites ?? []) }
     this.state.workspaces.push(workspace)
     if (this.state.activeWorkspaceId === null) this.state.activeWorkspaceId = id
     return workspace

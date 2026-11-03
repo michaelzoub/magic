@@ -7,6 +7,7 @@ import { Briefcase, GradCap, Layers, User } from '@/components/icons'
 export type Workspace = {
   id: string
   name: string
+  description: string
   Icon: (p: SVGProps<SVGSVGElement>) => ReactNode
   tabs?: WorkspaceTabSet['tabs']
   activeTabId?: string | null
@@ -16,9 +17,9 @@ export type { WorkspaceTabSet, WorkspaceTabSwitch }
 
 // Mock data; swap for a store once workspaces are real.
 const seed: Workspace[] = [
-  { id: 'personal', name: 'Personal', Icon: User },
-  { id: 'work', name: 'Work', Icon: Briefcase },
-  { id: 'school', name: 'School', Icon: GradCap }
+  { id: 'personal', name: 'Personal', description: 'Personal browsing', Icon: User },
+  { id: 'work', name: 'Work', description: 'Work projects and tools', Icon: Briefcase },
+  { id: 'school', name: 'School', description: 'Coursework and research', Icon: GradCap }
 ]
 
 /**
@@ -46,7 +47,7 @@ export function useWorkspaces() {
   const create = useCallback(
     (raw: string, current: WorkspaceTabSet): { error: string | null; plan: WorkspaceTabSwitch | null } => {
       try {
-        const { replaceTabs } = board.addAndSwitch({ id: crypto.randomUUID(), name: raw.trim(), Icon: Layers }, current)
+        const { replaceTabs } = board.addAndSwitch({ id: crypto.randomUUID(), name: raw.trim(), description: '', Icon: Layers }, current)
         return { error: null, plan: replaceTabs }
       } catch (e) {
         if (!(e instanceof Error)) return { error: 'Could not create workspace', plan: null }
@@ -60,8 +61,8 @@ export function useWorkspaces() {
 
   /** Switch to a possibly-unregistered workspace (e.g. a Memory focus mode), carrying its tabs. */
   const ensureAndSwitch = useCallback(
-    (w: { id: string; name: string; tabs?: WorkspaceTabSet['tabs']; activeTabId?: string | null }, current: WorkspaceTabSet) =>
-      board.ensureAndSwitch({ ...w, Icon: Layers }, current).replaceTabs,
+    (w: { id: string; name: string; description?: string; tabs?: WorkspaceTabSet['tabs']; activeTabId?: string | null }, current: WorkspaceTabSet) =>
+      board.ensureAndSwitch({ description: '', ...w, Icon: Layers }, current).replaceTabs,
     [board]
   )
 
