@@ -12,7 +12,7 @@ export function LoadingBar({ loading }: { loading: boolean }) {
   return (
     <div
       ref={ref}
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-[1.5px] origin-left bg-[#5e6ad2] opacity-0"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-[1.5px] origin-left bg-brand opacity-0"
     />
   )
 }

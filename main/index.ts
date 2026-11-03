@@ -25,6 +25,7 @@ function createWindow(): void {
     minWidth: 640,
     minHeight: 420,
     show: false,
+    title: 'Magic',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     vibrancy: 'sidebar',

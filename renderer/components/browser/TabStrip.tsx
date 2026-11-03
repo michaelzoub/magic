@@ -24,9 +24,9 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: Props)
             aria-selected={active}
             onMouseDown={() => onSelect(tab.id)}
             onAuxClick={(e) => e.button === 1 && onClose(tab.id)}
-            className={`no-drag group relative flex h-7 min-w-0 max-w-[200px] flex-1 basis-0 items-center gap-2 rounded-md pl-2 pr-1 text-xs transition-colors duration-100
+            className={`no-drag group relative flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 items-center gap-2 rounded-lg pl-3 pr-1 text-[13px] transition-colors duration-100
               ${active
-                ? 'bg-chrome-active text-chrome-text shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.08),0_1px_2px_rgb(0_0_0/0.05)]'
+                ? 'bg-chrome-active text-chrome-text shadow-[0_0_0_1px_rgb(var(--chrome-border)/0.10),0_1px_2px_rgb(0_0_0/0.05)]'
                 : 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text'} ${tab.isDiscarded ? 'opacity-60' : ''}`}
           >
             {tab.favicon ? (

@@ -8,6 +8,8 @@ import { createOnboarding } from '@/features/onboarding/onboarding'
 import { ImportLoginsDialog } from '@/components/imports/ImportLoginsDialog'
 import { MemoryDialog, type MemoryNavigateTarget } from '@/components/memory/MemoryDialog'
 import { RAIL, Sidebar } from '@/components/browser/Sidebar'
+import { IconButton } from '@/components/ui/IconButton'
+import { SidebarIcon } from '@/components/ui/icons'
 import { TabStrip } from '@/components/browser/TabStrip'
 import { Toolbar } from '@/components/browser/Toolbar'
 import { Viewport } from '@/components/browser/Viewport'
@@ -15,8 +17,8 @@ import { Viewport } from '@/components/browser/Viewport'
 export function App() {
   const { tabs, activeTabId, activeTab, engine } = useBrowser()
   const id = activeTab?.id
-  const [sidebar, setSidebar] = useState(RAIL)
-  const [lastOpen, setLastOpen] = useState(208)
+  const [sidebar, setSidebar] = useState(248)
+  const [lastOpen, setLastOpen] = useState(248)
   const open = sidebar > RAIL
   const resize = (w: number) => (setSidebar(w), w > RAIL && setLastOpen(w))
   const memory = useMemory()
@@ -152,16 +154,16 @@ export function App() {
       <Sidebar
         width={sidebar}
         onWidth={resize}
-        onToggle={() => setSidebar(open ? RAIL : lastOpen)}
         onMemory={() => setMemoryOpen(true)}
+        memoryCount={memory.checkpoints.length}
         onSettings={() => setImportOpen(true)}
         ws={ws}
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createWorkspace}
         onWorkspaceMenuOpenChange={setWorkspaceMenuOpen}
       />
-      <main className="relative flex min-w-0 flex-1 flex-col pb-2 pr-2">
-        <header className="flex h-[44px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebar) }}>
+      <main className="relative flex min-w-0 flex-1 flex-col bg-chrome-panel">
+        <header className="flex h-[48px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebar) }}>
           <TabStrip
             tabs={tabs}
             activeTabId={activeTabId}
@@ -169,6 +171,13 @@ export function App() {
             onClose={(t) => engine.closeTab(t)}
             onNew={() => engine.createTab()}
           />
+          {/* Panel toggle lives in the window chrome, not the sidebar, so it
+              stays in exactly the same spot whatever the panel state. */}
+          <span className="ml-1 mr-1 shrink-0">
+            <IconButton tip={open ? 'Hide sidebar' : 'Show sidebar'} onClick={() => setSidebar(open ? RAIL : lastOpen)}>
+              <SidebarIcon />
+            </IconButton>
+          </span>
         </header>
         <Toolbar
           tab={activeTab}

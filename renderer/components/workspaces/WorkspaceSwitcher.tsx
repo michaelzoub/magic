@@ -6,8 +6,13 @@ import type { UseWorkspaces } from '@/hooks/useWorkspaces'
 
 type State = UseWorkspaces
 
-const row = `no-drag flex h-8 w-full items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] transition-colors duration-100
-  hover:bg-chrome-hover/[0.06] hover:text-chrome-text active:bg-chrome-hover/[0.09]`
+const row = `no-drag flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg text-sm transition-colors duration-100
+  hover:bg-chrome-hover/[0.05] hover:text-chrome-text active:bg-chrome-hover/[0.08]`
+
+/** Expanded rows are left-aligned with padding; on the collapsed rail the icon is centred with no padding (else it overflows the 28px inner width and clips). */
+const rowAlign = (expanded: boolean) => (expanded ? 'px-2.5' : 'justify-center px-0')
+
+const pad = (n: number) => String(n).padStart(2, '0')
 
 /** The "Workspace" nav button; opens the switcher popover. */
 export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenChange }: {
@@ -38,14 +43,16 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
   const trigger = (
     <button
       type="button"
-      aria-label="Workspace"
+      aria-label="Workspaces"
+      data-workspace-menu
       aria-haspopup="menu"
       aria-expanded={menu}
       onClick={(e) => (motion.press(e.currentTarget), menu ? close() : setOpen(true))}
-      className={`${row} ${menu ? 'bg-chrome-hover/[0.06] text-chrome-text' : 'text-chrome-muted'}`}
+      className={`${row} ${rowAlign(expanded)} ${menu || expanded ? 'bg-chrome-hover/[0.055] font-medium text-chrome-text' : 'text-chrome-muted'}`}
     >
-      <span className="grid w-4 shrink-0 place-items-center"><Workspaces /></span>
-      {expanded && <span className="truncate">Workspace</span>}
+      <span className="grid w-5 shrink-0 place-items-center"><Workspaces /></span>
+      {expanded && <span className="truncate">Workspaces</span>}
+      {expanded && <span className="ml-auto text-xs tabular-nums text-chrome-faint">{pad(ws.all.length)}</span>}
     </button>
   )
 
@@ -89,7 +96,7 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
                 if (e.key === 'Escape') (e.stopPropagation(), setDraft(null), setError(null))
               }}
               className={`h-7 w-full rounded-[5px] bg-white/[0.06] px-2 text-white outline-none placeholder:text-white/35
-                ring-1 ${error ? 'ring-red-400/70' : 'ring-white/[0.08] focus:ring-[#5e6ad2]/70'}`}
+                ring-1 ${error ? 'ring-red-400/70' : 'ring-white/[0.08] focus:ring-brand/70'}`}
             />
             <textarea
               value={draft.goal}
@@ -102,7 +109,7 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
                 if (e.key === 'Escape') (e.stopPropagation(), setDraft(null), setError(null))
               }}
               className="min-h-11 w-full resize-none rounded-[5px] bg-white/[0.06] px-2 py-1.5 leading-5 text-white outline-none placeholder:text-white/35
-                ring-1 ring-white/[0.08] focus:ring-[#5e6ad2]/70"
+                ring-1 ring-white/[0.08] focus:ring-brand/70"
             />
             {error && <div className="px-1 pt-0.5 text-[11px] text-red-300">{error}</div>}
           </div>
@@ -124,10 +131,11 @@ export function WorkspaceList({ open: expanded, ws, onSelect }: { open: boolean;
             aria-label={w.name}
             aria-current={active}
             onClick={(e) => (motion.press(e.currentTarget), onSelect(w.id))}
-            className={`${row} ${active ? 'bg-chrome-hover/[0.06] text-chrome-text' : 'text-chrome-muted'}`}
+            className={`${row} ${rowAlign(expanded)} ${active ? 'bg-chrome-hover/[0.055] font-medium text-chrome-text' : 'text-chrome-muted'}`}
           >
-            <span className="grid w-4 shrink-0 place-items-center"><w.Icon /></span>
+            <span className="grid w-5 shrink-0 place-items-center"><w.Icon /></span>
             {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}
+            {expanded && <span className="text-xs tabular-nums text-chrome-faint">{pad(w.tabs?.length ?? 0)}</span>}
           </button>
         )
         if (!expanded) {

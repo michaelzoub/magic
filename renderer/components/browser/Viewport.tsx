@@ -100,7 +100,7 @@ export function Viewport({ tab, hidden = false }: { tab: TabState | null; hidden
   return (
     <div
       ref={ref}
-      className="relative flex-1 overflow-hidden rounded-lg bg-chrome-panel shadow-[0_0_0_0.5px_rgb(var(--chrome-border)/0.08),0_1px_2px_rgb(0_0_0/0.04)]"
+      className="relative flex-1 overflow-hidden bg-chrome-panel"
     >
       {frozen && frozen.tabId === tabId && tabUrl ? (
         <img src={frozen.image} alt="" draggable={false} className="absolute inset-0 h-full w-full" />
