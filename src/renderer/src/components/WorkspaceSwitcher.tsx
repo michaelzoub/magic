@@ -54,16 +54,24 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
       {expanded || menu ? trigger : <Tooltip label="Workspace" side="right">{trigger}</Tooltip>}
       <Popover open={menu} onClose={close} label="Switch workspace" placement={expanded ? 'bottom-start' : 'right-start'}>
         <MenuLabel>Workspaces</MenuLabel>
-        {ws.all.map((w) => (
-          <MenuItem
-            key={w.id}
-            icon={<w.Icon />}
-            label={w.name}
-            detail={w.goal || undefined}
-            selected={w.id === ws.activeId}
-            onSelect={() => (onSelect(w.id), close())}
-          />
-        ))}
+        {ws.all.map((w) => {
+          const item = (
+            <MenuItem
+              icon={<w.Icon />}
+              label={w.name}
+              detail={w.goal || undefined}
+              selected={w.id === ws.activeId}
+              onSelect={() => (onSelect(w.id), close())}
+            />
+          )
+          return w.goal ? (
+            <Tooltip key={w.id} label="Goal" body={w.goal} side="right" className="flex w-full">
+              {item}
+            </Tooltip>
+          ) : (
+            <div key={w.id}>{item}</div>
+          )
+        })}
         <MenuDivider />
         {draft === null ? (
           <MenuItem muted icon={<Plus />} label="Create workspace" onSelect={() => setDraft({ name: '', goal: '' })} />
@@ -122,7 +130,20 @@ export function WorkspaceList({ open: expanded, ws, onSelect }: { open: boolean;
             {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}
           </button>
         )
-        return expanded ? <div key={w.id}>{button}</div> : <Tooltip key={w.id} label={w.name} side="right">{button}</Tooltip>
+        if (!expanded) {
+          return (
+            <Tooltip key={w.id} label={w.name} body={w.goal || undefined} side="right">
+              {button}
+            </Tooltip>
+          )
+        }
+        return w.goal ? (
+          <Tooltip key={w.id} label="Goal" body={w.goal} side="right" className="flex w-full">
+            {button}
+          </Tooltip>
+        ) : (
+          <div key={w.id}>{button}</div>
+        )
       })}
     </>
   )

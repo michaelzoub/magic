@@ -10,6 +10,9 @@ html,body{margin:0;background:transparent;overflow:hidden}
 #t{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border-radius:5px;padding:4px 8px;
 background:#262626;color:#fff;font:500 11px/16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
 box-shadow:0 0 0 .5px rgb(255 255 255/.06);opacity:0;transition:opacity 100ms ease-out}
+#t.card{display:block;width:max-content;max-width:240px;white-space:normal;border-radius:8px;padding:8px 10px}
+#t .h{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgb(255 255 255/.45);margin-bottom:2px}
+#t .b{font-size:12px;line-height:16px}
 #t.on{opacity:1}kbd{font:inherit;color:rgb(255 255 255/.45)}
 </style></head><body><div id="t"></div></body></html>`
 
@@ -23,14 +26,23 @@ export class TooltipOverlay {
     this.view.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(HTML)}`)
   }
 
-  async show({ label, shortcut, side, anchor }: TooltipRequest): Promise<void> {
+  async show({ label, body, shortcut, side, anchor }: TooltipRequest): Promise<void> {
     const seq = ++this.seq
     const wc = this.view.webContents
     if (wc.isDestroyed()) return
     const size: { width: number; height: number } = await wc.executeJavaScript(`(() => {
-      const t = document.getElementById('t'); t.className = ''; t.textContent = ${JSON.stringify(label)}
-      const s = ${JSON.stringify(shortcut ?? '')}
-      if (s) { const k = document.createElement('kbd'); k.textContent = s; t.append(k) }
+      const t = document.getElementById('t'); t.className = ''; t.textContent = ''
+      const b = ${JSON.stringify(body ?? '')}
+      if (b) {
+        t.classList.add('card')
+        const h = document.createElement('div'); h.className = 'h'; h.textContent = ${JSON.stringify(label)}
+        const p = document.createElement('div'); p.className = 'b'; p.textContent = b
+        t.append(h, p)
+      } else {
+        t.textContent = ${JSON.stringify(label)}
+        const s = ${JSON.stringify(shortcut ?? '')}
+        if (s) { const k = document.createElement('kbd'); k.textContent = s; t.append(k) }
+      }
       const r = t.getBoundingClientRect(); return { width: Math.ceil(r.width), height: Math.ceil(r.height) }
     })()`)
     if (seq !== this.seq || this.window.isDestroyed()) return
@@ -41,10 +53,11 @@ export class TooltipOverlay {
       side === 'right' ? { x: anchor.x + anchor.width + GAP.right, y: cy - size.height / 2 }
       : side === 'top' ? { x: cx - size.width / 2, y: anchor.y - GAP.top - size.height }
       : { x: cx - size.width / 2, y: anchor.y + anchor.height + GAP.bottom }
-    const [winW] = this.window.getContentSize()
+    const [winW, winH] = this.window.getContentSize()
     const x = Math.max(4, Math.min(Math.round(pos.x), winW - size.width - 4))
+    const y = Math.max(4, Math.min(Math.round(pos.y), winH - size.height - 4))
 
-    this.view.setBounds({ x, y: Math.round(pos.y), width: size.width, height: size.height })
+    this.view.setBounds({ x, y, width: size.width, height: size.height })
     // Re-adding moves it to the top of the stack, above any newly attached page view.
     this.window.contentView.addChildView(this.view)
     void wc.executeJavaScript(`document.getElementById('t').className = 'on'`)
