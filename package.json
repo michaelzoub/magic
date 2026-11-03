@@ -9,7 +9,13 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "agent:dev": "eve dev",
+    "agent:info": "eve info",
+    "agent:build": "eve build"
+  },
+  "engines": {
+    "node": ">=24"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
@@ -24,6 +30,9 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.84",
+    "ai": "^7.0.162",
+    "eve": "^1.0.0-rc.2",
     "gsap": "^3.15.0",
     "preact": "^11.1.0",
     "zod": "^4.6.7"

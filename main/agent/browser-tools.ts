@@ -1,4 +1,4 @@
-import { createToolRegistry, type ToolContext } from '@agent/tools'
+import { createToolRegistry, type ToolContext } from '@agent/lib/tools'
 import type { BrowserStore } from '@core/workspaces'
 import type { ElectronEngine } from '../browser/electron-engine'
 import { ElectronPageDriver } from '../browser/electron-page-driver'

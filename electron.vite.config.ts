@@ -21,7 +21,9 @@ export default defineConfig({
     root: resolve(__dirname, 'renderer'),
     build: { rollupOptions: { input: resolve(__dirname, 'renderer/index.html') } },
     resolve: { alias: { ...shared, '@': resolve(__dirname, 'renderer') } },
-    server: { port: 5174, strictPort: true },
+    // MAGIC_RENDERER_PORT lets parallel workspaces (each with its own dev
+    // server) avoid colliding on the default port.
+    server: { port: Number(process.env.MAGIC_RENDERER_PORT ?? 5174), strictPort: true },
     plugins: [preact()]
   }
 })

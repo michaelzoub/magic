@@ -4,6 +4,7 @@ import { IMPORT_IPC, type LoginImporter } from '@shared/import'
 import { OVERLAY_IPC, type ShellOverlay } from '@shared/overlay'
 import { WORKSPACE_IPC, type WorkspacePersistence } from '@shared/workspaces'
 import { ONBOARDING_IPC, type OnboardingPersistence } from '@shared/onboarding'
+import { AGENT_IPC, type EmbeddedAgent } from '@shared/agent'
 
 const call =
   <C extends EngineCommand>(command: C) =>
@@ -54,6 +55,11 @@ const onboarding: OnboardingPersistence = {
   loadOnboarding: () => ipcRenderer.invoke(ONBOARDING_IPC.load)
 }
 
+const agent: EmbeddedAgent = {
+  workspaceSwitched: (notice) => ipcRenderer.invoke(AGENT_IPC.workspaceSwitched, notice)
+}
+
+contextBridge.exposeInMainWorld('agent', agent)
 contextBridge.exposeInMainWorld('onboarding', onboarding)
 contextBridge.exposeInMainWorld('workspaces', workspaces)
 contextBridge.exposeInMainWorld('engine', engine)

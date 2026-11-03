@@ -7,20 +7,23 @@ import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { createOnboarding } from '@/features/onboarding/onboarding'
 import { ImportLoginsDialog } from '@/components/imports/ImportLoginsDialog'
 import { MemoryDialog, type MemoryNavigateTarget } from '@/components/memory/MemoryDialog'
-import { RAIL, Sidebar } from '@/components/browser/Sidebar'
+import { RAIL, SIDEBAR_WIDTH, Sidebar } from '@/components/browser/Sidebar'
 import { IconButton } from '@/components/ui/IconButton'
 import { SidebarIcon } from '@/components/ui/icons'
 import { TabStrip } from '@/components/browser/TabStrip'
 import { Toolbar } from '@/components/browser/Toolbar'
 import { Viewport } from '@/components/browser/Viewport'
+import { embeddedAgent } from '@/adapters/agent'
+import type { AgentWorkspaceInfo } from '@shared/agent'
 
 export function App() {
   const { tabs, activeTabId, activeTab, engine } = useBrowser()
   const id = activeTab?.id
-  const [sidebar, setSidebar] = useState(248)
-  const [lastOpen, setLastOpen] = useState(248)
-  const open = sidebar > RAIL
-  const resize = (w: number) => (setSidebar(w), w > RAIL && setLastOpen(w))
+  // The side panel toggles between its two fixed widths (expanded / rail,
+  // see Sidebar) — never hidden, never drag-resized through widths that
+  // clip its rows.
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const sidebarWidth = sidebarOpen ? SIDEBAR_WIDTH : RAIL
   const memory = useMemory()
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -74,6 +77,33 @@ export function App() {
     })
   }
 
+  /**
+   * Run the embedded agent for a completed switch: it gets the before →
+   * after workspace info (name + goal) plus both tab sets, and can open/
+   * close/navigate tabs in the now-active workspace via its tools.
+   * Fire-and-forget — a slow or unavailable agent never delays switching.
+   */
+  const runSwitchAgent = (
+    fromId: string | null,
+    to: AgentWorkspaceInfo,
+    current: ReturnType<typeof currentTabSet>,
+    plan: WorkspaceSwitchPlan
+  ) => {
+    const from = fromId ? ws.all.find((w) => w.id === fromId) : undefined
+    void embeddedAgent
+      .workspaceSwitched({
+        from: from ? { id: from.id, name: from.name, goal: from.goal } : null,
+        to,
+        outgoingTabs: current.tabs.map((t) => ({ title: t.title, url: t.url })),
+        incomingTabs: plan.tabs.map((t) => ({ title: t.title ?? '', url: t.url }))
+      })
+      .then((r) => {
+        if (r.status === 'failed' || r.status === 'skipped') console.info('[agent] workspace switch run', r.status, r.reason ?? '')
+        else if (r.reply) console.info('[agent] workspace switch run', r.status, r.reply)
+      })
+      .catch(() => {})
+  }
+
   /** Switch workspaces: the target workspace's respective tabs become the open tabs. */
   const selectWorkspace = async (workspaceId: string) => {
     const fromId = ws.activeId
@@ -83,6 +113,7 @@ export function App() {
     if (plan) {
       if (target) recordTransition(fromId, { id: target.id, title: target.name }, current, plan)
       await applySwitch(workspaceId, plan)
+      if (target) runSwitchAgent(fromId, { id: target.id, name: target.name, goal: target.goal }, current, plan)
     }
   }
 
@@ -94,6 +125,7 @@ export function App() {
     if (!error && plan) {
       if (workspaceId) recordTransition(fromId, { id: workspaceId, title: name.trim() }, current, plan)
       if (workspaceId) await applySwitch(workspaceId, plan)
+      if (workspaceId) runSwitchAgent(fromId, { id: workspaceId, name: name.trim(), goal: goal.trim() }, current, plan)
     }
     return error
   }
@@ -133,7 +165,12 @@ export function App() {
     // Before restores tabs into the current workspace; After lands on the focus mode.
     const workspaceId = target === 'before' ? (ws.activeId ?? '') : checkpoint.after.workspaceId
     if (!plan) return
+    const fromId = ws.activeId
+    const current = currentTabSet()
     await applySwitch(workspaceId, plan, true)
+    if (target === 'after') {
+      runSwitchAgent(fromId, { id: workspaceId, name: checkpoint.after.title, goal: '' }, current, plan)
+    }
     setMemoryOpen(false)
   }
 
@@ -149,11 +186,10 @@ export function App() {
   }, [engine, id])
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
       <div className="drag absolute inset-x-0 top-0 h-[44px]" />
       <Sidebar
-        width={sidebar}
-        onWidth={resize}
+        open={sidebarOpen}
         onMemory={() => setMemoryOpen(true)}
         memoryCount={memory.checkpoints.length}
         onSettings={() => setImportOpen(true)}
@@ -162,8 +198,14 @@ export function App() {
         onCreateWorkspace={createWorkspace}
         onWorkspaceMenuOpenChange={setWorkspaceMenuOpen}
       />
-      <main className="relative flex min-w-0 flex-1 flex-col bg-chrome-panel">
-        <header className="flex h-[48px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebar) }}>
+      {/* Page area sits on the chrome background as an inset, layered card
+          (see Viewport), with the same bottom/right gutter it had before
+          the restyle made everything flush with the panel. */}
+      <main className="relative flex min-w-0 flex-1 flex-col pb-2 pr-2">
+        {/* Traffic lights occupy the top-left ~68px of the window, over the
+            sidebar's reserved drag strip. The rail (52px) is narrower than
+            that, so on the rail the header pads tabs clear of them. */}
+        <header className="flex h-[44px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebarWidth) }}>
           <TabStrip
             tabs={tabs}
             activeTabId={activeTabId}
@@ -174,7 +216,7 @@ export function App() {
           {/* Panel toggle lives in the window chrome, not the sidebar, so it
               stays in exactly the same spot whatever the panel state. */}
           <span className="ml-1 mr-1 shrink-0">
-            <IconButton tip={open ? 'Hide sidebar' : 'Show sidebar'} onClick={() => setSidebar(open ? RAIL : lastOpen)}>
+            <IconButton tip={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} onClick={() => setSidebarOpen(!sidebarOpen)}>
               <SidebarIcon />
             </IconButton>
           </span>
