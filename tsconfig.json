@@ -15,11 +15,11 @@
       "react": ["./node_modules/preact/compat"],
       "react/jsx-runtime": ["./node_modules/preact/jsx-runtime"],
       "react-dom/client": ["./node_modules/preact/compat/client"],
-      "@shared/*": ["./src/shared/*"],
-      "@core/*": ["./src/core/*"],
-      "@agent/*": ["./src/agent/*"],
-      "@/*": ["./src/renderer/*"]
+      "@shared/*": ["./shared/*"],
+      "@core/*": ["./core/*"],
+      "@agent/*": ["./agent/*"],
+      "@/*": ["./renderer/*"]
     }
   },
-  "include": ["src", "electron.vite.config.ts"]
+  "include": ["main", "preload", "renderer", "agent", "core", "shared", "electron.vite.config.ts"]
 }
