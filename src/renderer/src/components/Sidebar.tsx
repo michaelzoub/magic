@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import type { ReactNode, SVGProps } from 'react'
 import { Memory, Settings, SidebarIcon } from './icons'
 import { Tooltip } from './ui'
-import { WorkspaceList, WorkspaceMenu, useWorkspaces } from './WorkspaceSwitcher'
+import { WorkspaceList, WorkspaceMenu } from './WorkspaceSwitcher'
+import type { UseWorkspaces } from '@/engine/useWorkspaces'
 import { motion } from '@/motion'
 
 export const RAIL = 52
@@ -33,11 +34,21 @@ function RailButton({ label, open, onClick, children }: { label: string; open: b
   return open ? button : <Tooltip label={label} side="right">{button}</Tooltip>
 }
 
-export function Sidebar({ width, onWidth, onToggle }: { width: number; onWidth(w: number): void; onToggle(): void }) {
+export function Sidebar({ width, onWidth, onToggle, onMemory, onSettings, ws, onSelectWorkspace, onCreateWorkspace, onWorkspaceMenuOpenChange }: {
+  width: number
+  onWidth(w: number): void
+  onToggle(): void
+  onMemory(): void
+  onSettings(): void
+  ws: UseWorkspaces
+  /** Switching sets the target workspace's respective tabs as the open tabs (App enacts it). */
+  onSelectWorkspace(id: string): void
+  onCreateWorkspace(name: string, description: string): Promise<string | null>
+  onWorkspaceMenuOpenChange(open: boolean): void
+}) {
   const [dragging, setDragging] = useState(false)
   const start = useRef({ x: 0, w: 0 })
   const open = width > RAIL
-  const ws = useWorkspaces()
 
   const onPointerDown = (e: PointerEvent) => {
     e.preventDefault()
@@ -73,21 +84,23 @@ export function Sidebar({ width, onWidth, onToggle }: { width: number; onWidth(w
       </div>
 
       <nav className="flex flex-col gap-0.5">
-        <WorkspaceMenu open={open} ws={ws} />
+        <WorkspaceMenu open={open} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} onOpenChange={onWorkspaceMenuOpenChange} />
         {primary.map(({ label, Icon }) => (
-          <RailButton key={label} label={label} open={open}><Icon /></RailButton>
+          <RailButton key={label} label={label} open={open} onClick={label === 'Memory' ? onMemory : undefined}>
+            <Icon />
+          </RailButton>
         ))}
       </nav>
 
       {/* Context area: workspaces picked from the menu, pinned items, recent contexts. */}
       {ws.list.length > 0 && (
         <section className="mt-3 flex flex-col gap-0.5 border-t border-chrome-border/[0.08] pt-3">
-          <WorkspaceList open={open} ws={ws} />
+          <WorkspaceList open={open} ws={ws} onSelect={onSelectWorkspace} />
         </section>
       )}
 
       <div className="mt-auto">
-        <RailButton label="Settings" open={open}><Settings /></RailButton>
+        <RailButton label="Settings" open={open} onClick={onSettings}><Settings /></RailButton>
       </div>
 
       <div

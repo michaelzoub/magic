@@ -1,6 +1,12 @@
 /**
- * Shared look for floating dark surfaces (tooltips, popovers, menus) so they
- * read as one family: near-black fill, hairline edge, soft shadow.
+ * Shared look for every floating surface — popups, dropdowns, menus,
+ * tooltips, and dialogs. Rule: they always have a dark charcoal background
+ * (neutral-800, softer than pure black).
+ *
+ * Enforcement: components in this folder must compose `surface` instead of
+ * setting their own background, and new features must import these
+ * components (Popover, Dialog, Tooltip, MenuItem…) rather than rolling
+ * their own floating UI. Checked by `surface.test.ts`.
  */
 export const surface =
-  'bg-[#1e1e1e] text-white shadow-[0_4px_16px_rgb(0_0_0/0.22),0_0_0_0.5px_rgb(255_255_255/0.06)]'
+  'bg-neutral-800 text-white shadow-[0_4px_16px_rgb(0_0_0/0.35),0_0_0_0.5px_rgb(255_255_255/0.08)]'

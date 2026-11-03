@@ -1,9 +1,13 @@
-import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, session } from 'electron'
 import { join } from 'node:path'
 import { IPC, type Bounds, type EngineCommand } from '@shared/engine'
+import { IMPORT_IPC } from '@shared/import'
 import { OVERLAY_IPC, type TooltipRequest } from '@shared/overlay'
+import { detectSources, importLogins } from './chrome-import'
 import { ElectronEngine } from './electron-engine'
+import { SqliteWorkspaceStore } from './workspace-db'
 import { TooltipOverlay } from './tooltip-overlay'
+import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -53,7 +57,7 @@ function createWindow(): void {
 
 const ALLOWED: ReadonlySet<EngineCommand> = new Set([
   'getSnapshot', 'createTab', 'closeTab', 'activateTab',
-  'navigate', 'goBack', 'goForward', 'reload', 'stop'
+  'navigate', 'goBack', 'goForward', 'reload', 'stop', 'capturePage'
 ])
 
 ipcMain.handle(IPC.invoke, (e, command: EngineCommand, ...args: unknown[]) => {
@@ -61,6 +65,21 @@ ipcMain.handle(IPC.invoke, (e, command: EngineCommand, ...args: unknown[]) => {
   if (!engine || !ALLOWED.has(command)) throw new Error(`Unknown engine command: ${command}`)
   return (engine[command] as (...a: unknown[]) => unknown)(...args)
 })
+
+// Workspace persistence: one SQLite database per user profile. Created lazily
+// so handlers stay safe before `app.whenReady`.
+let workspaceDb: SqliteWorkspaceStore | null = null
+const workspaces = (): SqliteWorkspaceStore =>
+  (workspaceDb ??= new SqliteWorkspaceStore(join(app.getPath('userData'), 'magic.sqlite')))
+
+ipcMain.handle(WORKSPACE_IPC.load, () => workspaces().loadSnapshot())
+ipcMain.handle(WORKSPACE_IPC.upsert, (_e, record: Parameters<SqliteWorkspaceStore['upsertWorkspace']>[0]) => workspaces().upsertWorkspace(record))
+ipcMain.handle(WORKSPACE_IPC.recordSwitch, (_e, input: RecordSwitchInput) => workspaces().recordSwitch(input))
+ipcMain.handle(WORKSPACE_IPC.saveTabSet, (_e, workspaceId: string, tabSet: PersistedTabSet) => workspaces().saveTabSet(workspaceId, tabSet))
+ipcMain.handle(WORKSPACE_IPC.listSwitches, (_e, limit?: number) => workspaces().listSwitches(limit))
+
+ipcMain.handle(IMPORT_IPC.detect, () => detectSources())
+ipcMain.handle(IMPORT_IPC.importLogins, (_e, sourceId: string) => importLogins(session.defaultSession, sourceId))
 
 ipcMain.on(IPC.preconnect, (e, input: string) => engines.get(e.sender.id)?.preconnect(input))
 ipcMain.on(IPC.bounds, (e, bounds: Bounds) => engines.get(e.sender.id)?.setViewportBounds(bounds))
@@ -74,3 +93,4 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit())
+app.on('will-quit', () => workspaceDb?.close())

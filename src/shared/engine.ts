@@ -46,6 +46,13 @@ export interface BrowserEngine {
   reload(id: TabId): Promise<void>
   stop(id: TabId): Promise<void>
 
+  /**
+   * Still image (data URL) of the tab's current page, or null when it has
+   * none. Lets the shell keep the site visible while the native view is
+   * detached under a dropdown/dialog.
+   */
+  capturePage(id: TabId): Promise<string | null>
+
   /** Hint that the user may navigate to `input` soon (DNS + TCP/TLS warm-up). */
   preconnect(input: string): void
 
