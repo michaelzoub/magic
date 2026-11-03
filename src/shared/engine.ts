@@ -40,6 +40,20 @@ export interface BrowserEngine {
   closeTab(id: TabId): Promise<void>
   activateTab(id: TabId): Promise<void>
 
+  /**
+   * Make `workspaceId`'s tabs the open tabs. Other workspaces' pages stay
+   * alive in the background (up to an engine-defined cap, least recently
+   * used are unloaded first), so switching back does not reload them.
+   * `tabs` seeds the workspace when it has no live tabs; `reset` discards
+   * whatever it has and opens exactly `tabs` (e.g. a Memory restore).
+   */
+  switchWorkspace(
+    workspaceId: string,
+    tabs: readonly { url: string; title?: string; favicon?: string }[],
+    activeIndex: number,
+    reset?: boolean
+  ): Promise<void>
+
   navigate(id: TabId, input: string): Promise<void>
   goBack(id: TabId): Promise<void>
   goForward(id: TabId): Promise<void>

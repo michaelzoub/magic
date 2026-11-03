@@ -13,11 +13,16 @@ interface Tab {
   state: TabState
   view: WebContentsView | null
   lastActive: number
+  workspaceId: string
 }
 
 /** Background tabs idle longer than this are unloaded. */
 const DISCARD_AFTER_MS = 10 * 60_000
 const EMIT_INTERVAL_MS = 16
+/** Workspaces whose pages stay loaded in the background; older ones are unloaded. */
+const MAX_LIVE_WORKSPACES = 3
+/** Owner of tabs opened before any workspace switch (the blank startup tab). */
+const NO_WORKSPACE = ''
 
 function createView(): WebContentsView {
   const view = new WebContentsView({
@@ -37,6 +42,9 @@ export class ElectronEngine implements BrowserEngine {
   private spare: WebContentsView | null = null
   private emitTimer: NodeJS.Timeout | null = null
   private discardTimer: NodeJS.Timeout
+  private activeWorkspace = NO_WORKSPACE
+  /** Workspace ids, most recently active first. */
+  private recentWorkspaces: string[] = []
 
   constructor(private window: BrowserWindow) {
     this.discardTimer = setInterval(() => this.discardIdleTabs(), 60_000)
@@ -52,10 +60,19 @@ export class ElectronEngine implements BrowserEngine {
   }
 
   async createTab(url?: string): Promise<TabId> {
+    const id = this.addTab(url)
+    await this.activateTab(id)
+    return id
+  }
+
+  /** Registers a tab in the active workspace without focusing it; `url` loads on first activation. */
+  private addTab(url?: string, saved?: { title?: string; favicon?: string }): TabId {
     const id = randomUUID()
     const tab: Tab = {
-      view: this.takeView(),
+      // With a URL the tab starts unloaded and gets a view on first activation.
+      view: url ? null : this.takeView(),
       lastActive: Date.now(),
+      workspaceId: this.activeWorkspace,
       state: {
         id, url: '', title: 'New Tab', isLoading: false,
         canGoBack: false, canGoForward: false, isDiscarded: false
@@ -63,10 +80,31 @@ export class ElectronEngine implements BrowserEngine {
     }
     this.tabs.set(id, tab)
     this.order.push(id)
-    this.wire(tab)
-    await this.activateTab(id)
-    if (url) await this.navigate(id, url)
+    if (url) Object.assign(tab.state, { url: normalizeInput(url), title: saved?.title || url, favicon: saved?.favicon, isDiscarded: true })
+    else this.wire(tab)
     return id
+  }
+
+  private removeTab(id: TabId): void {
+    const tab = this.tabs.get(id)
+    if (!tab) return
+    this.destroyView(tab)
+    this.tabs.delete(id)
+    this.order.splice(this.order.indexOf(id), 1)
+    if (this.activeTabId === id) this.activeTabId = null
+  }
+
+  /** Unloads every tab of workspaces beyond the most recent MAX_LIVE_WORKSPACES. */
+  private evictStaleWorkspaces(): void {
+    const stale = new Set(this.recentWorkspaces.slice(MAX_LIVE_WORKSPACES))
+    for (const tab of this.tabs.values()) {
+      if (stale.has(tab.workspaceId)) this.discard(tab)
+    }
+    this.emit()
+  }
+
+  private visibleIds(): TabId[] {
+    return this.order.filter((t) => this.tabs.get(t)!.workspaceId === this.activeWorkspace)
   }
 
   async closeTab(id: TabId): Promise<void> {
@@ -79,11 +117,37 @@ export class ElectronEngine implements BrowserEngine {
 
     if (this.activeTabId === id) {
       this.activeTabId = null
-      const next = this.order[Math.min(index, this.order.length - 1)]
+      const siblings = this.order.filter((t) => this.tabs.get(t)!.workspaceId === tab.workspaceId)
+      const next = this.order.slice(index).find((t) => siblings.includes(t)) ?? siblings.at(-1)
       if (next) await this.activateTab(next)
     }
-    if (this.order.length === 0) await this.createTab()
+    if (this.visibleIds().length === 0) await this.createTab()
     else this.emit()
+  }
+
+  async switchWorkspace(workspaceId: string, tabs: readonly { url: string; title?: string; favicon?: string }[], activeIndex: number, reset = false): Promise<void> {
+    const previous = this.activeWorkspace
+    const current = this.activeTabId && this.tabs.get(this.activeTabId)
+    if (current) current.lastActive = Date.now()
+
+    this.activeWorkspace = workspaceId
+    this.activeTabId = null
+    this.recentWorkspaces = [workspaceId, ...this.recentWorkspaces.filter((w) => w !== workspaceId)]
+
+    const owned = (w: string) => this.order.filter((t) => this.tabs.get(t)!.workspaceId === w)
+    // The startup tab belongs to no workspace; drop it once a real one opens.
+    if (previous === NO_WORKSPACE && workspaceId !== NO_WORKSPACE) for (const t of owned(NO_WORKSPACE)) this.removeTab(t)
+    if (reset) for (const t of owned(workspaceId)) this.removeTab(t)
+
+    let ids = owned(workspaceId)
+    if (ids.length === 0) {
+      // Cold: never opened here, or reset. Views are created now; only the active one loads below.
+      for (const t of tabs) ids.push(this.addTab(t.url, t))
+      if (ids.length === 0) ids.push(this.addTab())
+    }
+    // Warm workspaces keep their views: activating just re-attaches, no reload.
+    await this.activateTab(ids[Math.min(Math.max(activeIndex, 0), ids.length - 1)])
+    this.evictStaleWorkspaces()
   }
 
   async activateTab(id: TabId): Promise<void> {
@@ -178,11 +242,17 @@ export class ElectronEngine implements BrowserEngine {
     const cutoff = Date.now() - DISCARD_AFTER_MS
     for (const [id, tab] of this.tabs) {
       if (id === this.activeTabId || tab.state.isDiscarded || !tab.state.url || tab.lastActive > cutoff) continue
-      if (tab.view?.webContents.isCurrentlyAudible()) continue
-      this.destroyView(tab)
-      Object.assign(tab.state, { isDiscarded: true, isLoading: false })
+      this.discard(tab)
     }
     this.emit()
+  }
+
+  /** Frees a tab's renderer process, keeping its URL so activation reloads it. Audible tabs are spared. */
+  private discard(tab: Tab): void {
+    if (tab.state.isDiscarded || !tab.state.url || tab.state.id === this.activeTabId) return
+    if (tab.view?.webContents.isCurrentlyAudible()) return
+    this.destroyView(tab)
+    Object.assign(tab.state, { isDiscarded: true, isLoading: false })
   }
 
   private restore(tab: Tab): void {
@@ -236,7 +306,7 @@ export class ElectronEngine implements BrowserEngine {
 
   private snapshot(): EngineSnapshot {
     return {
-      tabs: this.order.map((id) => ({ ...this.tabs.get(id)!.state })),
+      tabs: this.visibleIds().map((id) => ({ ...this.tabs.get(id)!.state })),
       activeTabId: this.activeTabId
     }
   }

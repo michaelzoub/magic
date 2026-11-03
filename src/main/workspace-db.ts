@@ -12,7 +12,7 @@ type UpsertInput = Parameters<import('@shared/workspaces').WorkspacePersistence[
 interface WorkspaceRow {
   id: string
   name: string
-  description: string
+  goal: string
   icon: string
   listed: number
   sort_order: number
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   name_key TEXT NOT NULL UNIQUE,
-  description TEXT NOT NULL DEFAULT '',
+  goal TEXT NOT NULL DEFAULT '',
   icon TEXT NOT NULL DEFAULT 'layers',
   listed INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS app_state (
 const toRecord = (r: WorkspaceRow): WorkspaceRecord => ({
   id: r.id,
   name: r.name,
-  description: r.description,
+  goal: r.goal,
   icon: r.icon,
   listed: r.listed === 1,
   sortOrder: r.sort_order,
@@ -99,7 +99,7 @@ const toSwitch = (r: SwitchRow): WorkspaceSwitchRecord => ({
  * its side effects (active workspace, listing, outgoing tabs) land atomically.
  *
  * Owns three facts:
- * - `workspaces`: every workspace ever selected or created, with description
+ * - `workspaces`: every workspace ever selected or created, with goal
  * - `workspace_switches`: append-only before → after history of every switch
  * - `workspace_tabs` + `app_state`: per-workspace open tabs and the active id
  */
@@ -110,6 +110,14 @@ export class SqliteWorkspaceStore {
     this.db = new DatabaseSync(filename)
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
     this.db.exec(SCHEMA)
+    this.migrateGoalColumn()
+  }
+
+  /** Pre-goal databases stored the same text in `description`; rename it in place so existing values survive. */
+  private migrateGoalColumn(): void {
+    const columns = this.db.prepare('PRAGMA table_info(workspaces)').all() as unknown as { name: string }[]
+    if (columns.some((c) => c.name === 'goal') || !columns.some((c) => c.name === 'description')) return
+    this.db.exec('ALTER TABLE workspaces RENAME COLUMN description TO goal')
   }
 
   close(): void {
@@ -145,11 +153,11 @@ export class SqliteWorkspaceStore {
     const now = Date.now()
     this.db
       .prepare(
-        `INSERT INTO workspaces (id, name, name_key, description, icon, listed, sort_order, created_at, updated_at, last_switched_at)
+        `INSERT INTO workspaces (id, name, name_key, goal, icon, listed, sort_order, created_at, updated_at, last_switched_at)
          VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM workspaces)), ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, name_key = excluded.name_key,
-           description = excluded.description, icon = excluded.icon,
+           goal = excluded.goal, icon = excluded.icon,
            listed = excluded.listed, updated_at = excluded.updated_at,
            last_switched_at = COALESCE(excluded.last_switched_at, workspaces.last_switched_at)`
       )
@@ -157,7 +165,7 @@ export class SqliteWorkspaceStore {
         input.id,
         input.name.trim(),
         input.name.trim().toLowerCase(),
-        input.description ?? '',
+        input.goal ?? '',
         input.icon || 'layers',
         input.listed ? 1 : 0,
         input.sortOrder ?? null,

@@ -30,6 +30,14 @@ export function createMemoryEngine(): BrowserEngine {
       if (!tabs.length) await engine.createTab()
     },
     activateTab: async (id) => set({ ...snap, activeTabId: id }),
+    // No live pages to keep: always replace the tab array.
+    async switchWorkspace(_workspaceId, tabs, activeIndex) {
+      const old = snap.tabs.map((t) => t.id)
+      const created: string[] = []
+      for (const t of tabs) created.push(await engine.createTab(t.url || undefined))
+      if (created[activeIndex]) await engine.activateTab(created[activeIndex])
+      for (const id of old) await engine.closeTab(id)
+    },
     async navigate(id, input) {
       const url = normalizeInput(input)
       patch(id, { url, title: new URL(url).hostname || url })
