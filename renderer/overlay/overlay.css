@@ -1,0 +1,6 @@
+/* The overlay view is transparent: only the floating surface itself is
+   painted, composited natively above the live page view. */
+html, body, #root {
+  background: transparent !important;
+  height: 100%;
+}

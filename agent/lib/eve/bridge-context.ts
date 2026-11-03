@@ -43,13 +43,13 @@ export function createBridgeToolContext(baseUrl: string, token?: string): ToolCo
     createTab: (url?: string) => call('browser', 'createTab', [url]),
     closeTab: (id: string) => call('browser', 'closeTab', [id]),
     activateTab: (id: string) => call('browser', 'activateTab', [id]),
+    moveTab: () => Promise.reject(new ToolError('forbidden', 'moveTab is not available to the agent')),
     switchWorkspace: () => Promise.reject(new ToolError('forbidden', 'switchWorkspace is not available to the agent')),
     navigate: (id: string, input: string) => call('browser', 'navigate', [id, input]),
     goBack: (id: string) => call('browser', 'goBack', [id]),
     goForward: (id: string) => call('browser', 'goForward', [id]),
     reload: (id: string) => call('browser', 'reload', [id]),
     stop: (id: string) => call('browser', 'stop', [id]),
-    capturePage: () => Promise.resolve(null),
     preconnect: () => {},
     setViewportBounds: () => {}
   } satisfies BrowserEngine

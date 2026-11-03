@@ -150,6 +150,21 @@ export class ElectronEngine implements BrowserEngine {
     this.evictStaleWorkspaces()
   }
 
+  async moveTab(id: TabId, toIndex: number): Promise<void> {
+    const tab = this.tabs.get(id)
+    if (!tab) return
+    // Reorder only within the tab's workspace: rewrite that workspace's
+    // slots in the global order, leaving other workspaces untouched.
+    const slots = this.order.filter((t) => this.tabs.get(t)!.workspaceId === tab.workspaceId)
+    const from = slots.indexOf(id)
+    if (from < 0) return
+    slots.splice(from, 1)
+    slots.splice(Math.min(Math.max(toIndex, 0), slots.length), 0, id)
+    let i = 0
+    this.order = this.order.map((t) => (this.tabs.get(t)!.workspaceId === tab.workspaceId ? slots[i++] : t))
+    this.emit()
+  }
+
   async activateTab(id: TabId): Promise<void> {
     const tab = this.tabs.get(id)
     if (!tab) return
@@ -183,17 +198,6 @@ export class ElectronEngine implements BrowserEngine {
   }
   async stop(id: TabId) {
     this.tabs.get(id)?.view?.webContents.stop()
-  }
-
-  async capturePage(id: TabId): Promise<string | null> {
-    const tab = this.tabs.get(id)
-    if (!tab?.view || !tab.state.url) return null
-    try {
-      const image = await tab.view.webContents.capturePage()
-      return image.isEmpty() ? null : image.toDataURL()
-    } catch {
-      return null
-    }
   }
 
   preconnect(input: string): void {

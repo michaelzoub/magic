@@ -19,7 +19,14 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'renderer'),
-    build: { rollupOptions: { input: resolve(__dirname, 'renderer/index.html') } },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'renderer/index.html'),
+          overlay: resolve(__dirname, 'renderer/overlay.html')
+        }
+      }
+    },
     resolve: { alias: { ...shared, '@': resolve(__dirname, 'renderer') } },
     // MAGIC_RENDERER_PORT lets parallel workspaces (each with its own dev
     // server) avoid colliding on the default port.

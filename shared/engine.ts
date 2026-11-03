@@ -39,6 +39,8 @@ export interface BrowserEngine {
   createTab(url?: string): Promise<TabId>
   closeTab(id: TabId): Promise<void>
   activateTab(id: TabId): Promise<void>
+  /** Move a tab to `toIndex` within its workspace's visible tab order (clamped). */
+  moveTab(id: TabId, toIndex: number): Promise<void>
 
   /**
    * Make `workspaceId`'s tabs the open tabs. Other workspaces' pages stay
@@ -59,13 +61,6 @@ export interface BrowserEngine {
   goForward(id: TabId): Promise<void>
   reload(id: TabId): Promise<void>
   stop(id: TabId): Promise<void>
-
-  /**
-   * Still image (data URL) of the tab's current page, or null when it has
-   * none. Lets the shell keep the site visible while the native view is
-   * detached under a dropdown/dialog.
-   */
-  capturePage(id: TabId): Promise<string | null>
 
   /** Hint that the user may navigate to `input` soon (DNS + TCP/TLS warm-up). */
   preconnect(input: string): void

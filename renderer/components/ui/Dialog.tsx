@@ -6,8 +6,9 @@ import { surface } from './surface'
 /**
  * Centered modal dialog. Dark charcoal background via the shared `surface` (see
  * surface.ts — all dialogs/popups/dropdowns use it). Closes on backdrop
- * click or Escape. Rendered above the chrome; callers must hide the native
- * page view while open, since it paints above renderer DOM.
+ * click or Escape. In Electron this is rendered by the overlay renderer
+ * inside the native overlay view, which composites above the live page
+ * view; in a plain browser it renders in-DOM as a fallback.
  */
 export function Dialog({ open, onClose, label, hideHeader = false, children }: {
   open: boolean
@@ -28,7 +29,7 @@ export function Dialog({ open, onClose, label, hideHeader = false, children }: {
   return (
     <div
       className="no-drag fixed inset-0 z-50 grid place-items-center bg-black/60 p-6"
-      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
+      onPointerDown={(e) => { console.log('DIALOG POINTERDOWN', e.isTrusted, e.pointerType, e.clientX, e.clientY, e.target === e.currentTarget); e.target === e.currentTarget && onClose() }}
     >
       <div
         role="dialog"

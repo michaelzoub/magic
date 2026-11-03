@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type BrowserEngine, type EngineCommand, type EngineSnapshot } from '@shared/engine'
 import { IMPORT_IPC, type LoginImporter } from '@shared/import'
-import { OVERLAY_IPC, type ShellOverlay } from '@shared/overlay'
+import { OVERLAY_IPC, type OverlayAction, type OverlayHost, type ShellOverlay, type SurfaceRequest } from '@shared/overlay'
 import { WORKSPACE_IPC, type WorkspacePersistence } from '@shared/workspaces'
 import { ONBOARDING_IPC, type OnboardingPersistence } from '@shared/onboarding'
 import { AGENT_IPC, type EmbeddedAgent } from '@shared/agent'
@@ -16,13 +16,13 @@ const engine: BrowserEngine = {
   createTab: call('createTab'),
   closeTab: call('closeTab'),
   activateTab: call('activateTab'),
+  moveTab: call('moveTab'),
   switchWorkspace: call('switchWorkspace'),
   navigate: call('navigate'),
   goBack: call('goBack'),
   goForward: call('goForward'),
   reload: call('reload'),
   stop: call('stop'),
-  capturePage: call('capturePage'),
   preconnect: (input) => ipcRenderer.send(IPC.preconnect, input),
   setViewportBounds: (b) => ipcRenderer.send(IPC.bounds, b),
   subscribe: (listener) => {
@@ -32,9 +32,42 @@ const engine: BrowserEngine = {
   }
 }
 
+let actionHandler: ((action: OverlayAction) => Promise<unknown>) | null = null
+ipcRenderer.on(OVERLAY_IPC.actionRequest, (_e, id: string, action: OverlayAction) => {
+  const respond = (ok: boolean, value?: unknown, error?: string) =>
+    ipcRenderer.send(OVERLAY_IPC.actionResponse, id, ok, value, error)
+  if (!actionHandler) return respond(false, undefined, 'No overlay action handler in the shell')
+  Promise.resolve(actionHandler(action)).then(
+    (v) => respond(true, v),
+    (e) => respond(false, undefined, e instanceof Error ? e.message : String(e))
+  )
+})
+
 const overlay: ShellOverlay = {
   showTooltip: (req) => ipcRenderer.send(OVERLAY_IPC.showTooltip, req),
-  hideTooltip: () => ipcRenderer.send(OVERLAY_IPC.hideTooltip)
+  hideTooltip: () => ipcRenderer.send(OVERLAY_IPC.hideTooltip),
+  showSurface: (req) => ipcRenderer.send(OVERLAY_IPC.showSurface, req),
+  hideSurface: () => ipcRenderer.send(OVERLAY_IPC.hideSurface),
+  onAction: (handler) => {
+    actionHandler = handler
+    return () => {
+      if (actionHandler === handler) actionHandler = null
+    }
+  }
+}
+
+const overlayHost: OverlayHost = {
+  onSurface: (handler) => {
+    const listener = (_: unknown, req: SurfaceRequest | null) => handler(req)
+    ipcRenderer.on(OVERLAY_IPC.surface, listener)
+    return () => ipcRenderer.removeListener(OVERLAY_IPC.surface, listener)
+  },
+  requestAction: (action) => ipcRenderer.invoke(OVERLAY_IPC.action, action),
+  dismiss: (kind) => {
+    console.log('[overlay-host] dismiss', kind, new Error().stack?.split('\n').slice(2, 6).join(' | '))
+    ipcRenderer.send(OVERLAY_IPC.dismiss, kind)
+    void ipcRenderer.invoke(OVERLAY_IPC.action, { type: 'surface:close', kind } satisfies OverlayAction).catch(() => {})
+  }
 }
 
 const importer: LoginImporter = {
@@ -65,4 +98,5 @@ contextBridge.exposeInMainWorld('workspaces', workspaces)
 contextBridge.exposeInMainWorld('engine', engine)
 contextBridge.exposeInMainWorld('importer', importer)
 contextBridge.exposeInMainWorld('overlay', overlay)
+contextBridge.exposeInMainWorld('overlayHost', overlayHost)
 contextBridge.exposeInMainWorld('platform', process.platform)

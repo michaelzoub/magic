@@ -7,9 +7,7 @@ import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { createOnboarding } from '@/features/onboarding/onboarding'
 import { ImportLoginsDialog } from '@/components/imports/ImportLoginsDialog'
 import { MemoryDialog, type MemoryNavigateTarget } from '@/components/memory/MemoryDialog'
-import { RAIL, SIDEBAR_WIDTH, Sidebar } from '@/components/browser/Sidebar'
-import { IconButton } from '@/components/ui/IconButton'
-import { SidebarIcon } from '@/components/ui/icons'
+import { Sidebar } from '@/components/browser/Sidebar'
 import { TabStrip } from '@/components/browser/TabStrip'
 import { Toolbar } from '@/components/browser/Toolbar'
 import { Viewport } from '@/components/browser/Viewport'
@@ -23,12 +21,22 @@ export function App() {
   // see Sidebar) — never hidden, never drag-resized through widths that
   // clip its rows.
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const sidebarWidth = sidebarOpen ? SIDEBAR_WIDTH : RAIL
+  // The tab strip clears the macOS traffic lights by an inset that depends
+  // on the panel's *current* width. The Sidebar GSAP-tweens that width and
+  // reports it per frame; applying it here as a direct style write (via
+  // headerRef, below) keeps the inset in sync with the animation without
+  // re-rendering the shell on every frame.
+  const headerRef = useRef<HTMLElement>(null)
+  const syncHeaderInset = (sidebarWidth: number) => {
+    if (headerRef.current) headerRef.current.style.paddingLeft = `${Math.max(8, 104 - Math.round(sidebarWidth))}px`
+  }
   const memory = useMemory()
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const ws = useWorkspaces()
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  // In Electron, dialogs/dropdowns render in the native overlay layer
+  // (window.overlay); without it (plain browser) they render in-DOM below.
+  const nativeOverlay = typeof window !== 'undefined' ? window.overlay : undefined
   // Redo onboarding on every app open/reload (for now): a fresh flow on
   // every mount, open immediately regardless of any previously saved
   // profile. Closing finishes/dismisses it until the next reload.
@@ -174,6 +182,54 @@ export function App() {
     setMemoryOpen(false)
   }
 
+  // --- Native overlay surfaces -------------------------------------------------
+  // Latest callbacks for the (once-registered) overlay action handler.
+  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, reloadActive: () => id && engine.reload(id) })
+  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, reloadActive: () => id && engine.reload(id) }
+
+  useEffect(() => {
+    if (!nativeOverlay) return
+    return nativeOverlay.onAction(async (action) => {
+      const h = overlayHandlers.current
+      switch (action.type) {
+        case 'surface:close':
+          window.dispatchEvent(new CustomEvent('magic:surface-closed', { detail: action.kind }))
+          if (action.kind === 'memory') setMemoryOpen(false)
+          if (action.kind === 'import') setImportOpen(false)
+          if (action.kind === 'onboarding') setOnboardingOpen(false)
+          return null
+        case 'memory:navigate':
+          await h.navigateMemory(action.checkpointId, action.target)
+          return null
+        case 'import:imported':
+          h.reloadActive()
+          return null
+        case 'workspace:select':
+          await h.selectWorkspace(action.id)
+          return null
+        case 'workspace:create':
+          return h.createWorkspace(action.name, action.goal)
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeOverlay])
+
+  // Push the open dialog (if any) into the native overlay; it re-renders there
+  // on every push, so live data (Memory checkpoints) stays current.
+  useEffect(() => {
+    if (!nativeOverlay) return
+    if (memoryOpen) nativeOverlay.showSurface({ kind: 'memory', checkpoints: memory.checkpoints })
+    else if (importOpen) nativeOverlay.showSurface({ kind: 'import' })
+    else if (onboardingOpen) nativeOverlay.showSurface({ kind: 'onboarding' })
+  }, [nativeOverlay, memoryOpen, importOpen, onboardingOpen, memory.checkpoints])
+
+  // A dialog closed from the shell side (e.g. Memory navigation) must also
+  // leave the native overlay. The workspace menu is not driven by these
+  // flags, and this only runs when they change, so it cannot hide it.
+  useEffect(() => {
+    if (nativeOverlay && !memoryOpen && !importOpen && !onboardingOpen) nativeOverlay.hideSurface()
+  }, [nativeOverlay, memoryOpen, importOpen, onboardingOpen])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return
@@ -190,13 +246,14 @@ export function App() {
       <div className="drag absolute inset-x-0 top-0 h-[44px]" />
       <Sidebar
         open={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onWidthChange={syncHeaderInset}
         onMemory={() => setMemoryOpen(true)}
         memoryCount={memory.checkpoints.length}
         onSettings={() => setImportOpen(true)}
         ws={ws}
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createWorkspace}
-        onWorkspaceMenuOpenChange={setWorkspaceMenuOpen}
       />
       {/* Page area sits on the chrome background as an inset, layered card
           (see Viewport), with the same bottom/right gutter it had before
@@ -205,21 +262,20 @@ export function App() {
         {/* Traffic lights occupy the top-left ~68px of the window, over the
             sidebar's reserved drag strip. The rail (52px) is narrower than
             that, so on the rail the header pads tabs clear of them. */}
-        <header className="flex h-[44px] items-center" style={{ paddingLeft: Math.max(8, 80 - sidebarWidth) }}>
+        {/* No paddingLeft in React props: Sidebar reports its animated
+            width (mount + every tween frame) and syncHeaderInset writes it
+            directly. A state-derived style here would snap to the target
+            inset on the toggle render, one frame before GSAP's first
+            frame — the jump this avoids. */}
+        <header ref={headerRef} className="flex h-[44px] items-center">
           <TabStrip
             tabs={tabs}
             activeTabId={activeTabId}
             onSelect={(t) => engine.activateTab(t)}
             onClose={(t) => engine.closeTab(t)}
             onNew={() => engine.createTab()}
+            onMove={(t, toIndex) => engine.moveTab(t, toIndex)}
           />
-          {/* Panel toggle lives in the window chrome, not the sidebar, so it
-              stays in exactly the same spot whatever the panel state. */}
-          <span className="ml-1 mr-1 shrink-0">
-            <IconButton tip={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} onClick={() => setSidebarOpen(!sidebarOpen)}>
-              <SidebarIcon />
-            </IconButton>
-          </span>
         </header>
         <Toolbar
           tab={activeTab}
@@ -230,24 +286,36 @@ export function App() {
           onNavigate={(input) => id && engine.navigate(id, input)}
           onPreconnect={(input) => engine.preconnect(input)}
         />
-        {/* Native page view paints above renderer DOM, so detach it while any
-            dropdown/dialog that extends over the page area is open — notably
-            the workspace dropdown from the collapsed rail. Viewport shows a
-            still capture of the page meanwhile, so the site stays visible. */}
-        <Viewport tab={activeTab} hidden={memoryOpen || importOpen || workspaceMenuOpen || onboardingOpen} />
+        {/* Dialogs/dropdowns live in the native overlay layer above the
+            page view (see overlay effects above), so the page stays live
+            and attached underneath them at all times. */}
+        {/* Blank tabs offer to pick up the most recent switch (newest Memory
+            checkpoint): restoring its Before reopens the tabs left behind. */}
+        <Viewport
+          tab={activeTab}
+          resume={memory.checkpoints[0] ?? null}
+          onResume={() => {
+            const latest = memory.checkpoints[0]
+            if (latest) void navigateMemory(latest.id, 'before')
+          }}
+        />
       </main>
-      <OnboardingWizard
-        flow={onboardingFlow.current}
-        open={onboardingOpen}
-        onClose={() => setOnboardingOpen(false)}
-        title="Welcome to Magic"
-      />
-      <MemoryDialog open={memoryOpen} memory={memory} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
-      <ImportLoginsDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={() => id && engine.reload(id)}
-      />
+      {!nativeOverlay && (
+        <>
+          <OnboardingWizard
+            flow={onboardingFlow.current}
+            open={onboardingOpen}
+            onClose={() => setOnboardingOpen(false)}
+            title="Welcome to Magic"
+          />
+          <MemoryDialog open={memoryOpen} checkpoints={memory.checkpoints} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
+          <ImportLoginsDialog
+            open={importOpen}
+            onClose={() => setImportOpen(false)}
+            onImported={() => id && engine.reload(id)}
+          />
+        </>
+      )}
     </div>
   )
 }

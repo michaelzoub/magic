@@ -1,5 +1,4 @@
 import type { Checkpoint, CheckpointId, TabSnapshot } from '@core/memory'
-import type { UseMemory } from '@/hooks/useMemory'
 import { ChevronRight } from '../ui/icons'
 import { Dialog } from '../ui'
 
@@ -62,22 +61,22 @@ function CheckpointRow({ checkpoint, onNavigate }: {
  * Navigating to a side reopens that side's tabs. Black bg comes from the
  * shared Dialog/surface — never set a background here.
  */
-export function MemoryDialog({ open, memory, onClose, onNavigate }: {
+export function MemoryDialog({ open, checkpoints, onClose, onNavigate }: {
   open: boolean
-  memory: UseMemory
+  checkpoints: Checkpoint[]
   onClose(): void
   onNavigate(id: CheckpointId, target: MemoryNavigateTarget): void
 }) {
   return (
     <Dialog open={open} onClose={onClose} label="Memory">
-      {memory.checkpoints.length === 0 ? (
+      {checkpoints.length === 0 ? (
         <p className="px-4 pb-5 pt-1 text-[12px] leading-5 text-white/50">
           No checkpoints yet. When the agent reorganizes your tabs into a focus mode, the tabs you had open are saved
           here so you can go back to them.
         </p>
       ) : (
         <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto px-3 pb-3">
-          {memory.checkpoints.map((c) => (
+          {checkpoints.map((c) => (
             <CheckpointRow key={c.id} checkpoint={c} onNavigate={onNavigate} />
           ))}
         </ul>
