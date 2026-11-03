@@ -56,7 +56,7 @@ function createWindow(): void {
 }
 
 const ALLOWED: ReadonlySet<EngineCommand> = new Set([
-  'getSnapshot', 'createTab', 'closeTab', 'activateTab',
+  'getSnapshot', 'createTab', 'closeTab', 'activateTab', 'switchWorkspace',
   'navigate', 'goBack', 'goForward', 'reload', 'stop', 'capturePage'
 ])
 

@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,8 +8,8 @@ import { SqliteWorkspaceStore } from './workspace-db'
 let dir: string
 let file: string
 
-const ws = (id: string, name: string, description = '') => ({
-  id, name, description, icon: 'layers', listed: false, lastSwitchedAt: null
+const ws = (id: string, name: string, goal = '') => ({
+  id, name, goal, icon: 'layers', listed: false, lastSwitchedAt: null
 })
 
 beforeEach(() => {
@@ -18,26 +19,46 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('SqliteWorkspaceStore', () => {
-  it('returns null before anything is saved, then round-trips workspaces with descriptions', () => {
+  it('returns null before anything is saved, then round-trips workspaces with goals', () => {
     const store = new SqliteWorkspaceStore(file)
     expect(store.loadSnapshot()).toBeNull()
-    store.upsertWorkspace(ws('work', 'Work', 'Work projects and tools'))
-    store.upsertWorkspace(ws('personal', 'Personal', 'Personal browsing'))
+    store.upsertWorkspace(ws('work', 'Work', 'Get work projects done'))
+    store.upsertWorkspace(ws('personal', 'Personal', 'Handle everyday browsing and errands'))
     const snap = store.loadSnapshot()!
-    expect(snap.workspaces.map((w) => [w.id, w.description])).toEqual([
-      ['work', 'Work projects and tools'],
-      ['personal', 'Personal browsing']
+    expect(snap.workspaces.map((w) => [w.id, w.goal])).toEqual([
+      ['work', 'Get work projects done'],
+      ['personal', 'Handle everyday browsing and errands']
     ])
     expect(snap.activeWorkspaceId).toBeNull()
+    store.close()
+  })
+
+  it('migrates a pre-goal database, preserving description text as the goal', () => {
+    const legacy = new DatabaseSync(file)
+    legacy.exec(`CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT 'layers',
+      listed INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, last_switched_at INTEGER
+    )`)
+    legacy
+      .prepare('INSERT INTO workspaces (id, name, name_key, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run('work', 'Work', 'work', 'Ship the v2 launch', 1, 1)
+    legacy.close()
+
+    const store = new SqliteWorkspaceStore(file)
+    expect(store.loadSnapshot()!.workspaces[0]!.goal).toBe('Ship the v2 launch')
+    store.upsertWorkspace(ws('work', 'Work', 'Ship the v3 launch'))
+    expect(store.loadSnapshot()!.workspaces[0]!.goal).toBe('Ship the v3 launch')
     store.close()
   })
 
   it('updates in place on re-upsert instead of duplicating', () => {
     const store = new SqliteWorkspaceStore(file)
     store.upsertWorkspace(ws('work', 'Work', 'old'))
-    store.upsertWorkspace(ws('work', 'Work', 'new description'))
+    store.upsertWorkspace(ws('work', 'Work', 'new goal'))
     expect(store.loadSnapshot()!.workspaces).toHaveLength(1)
-    expect(store.loadSnapshot()!.workspaces[0]!.description).toBe('new description')
+    expect(store.loadSnapshot()!.workspaces[0]!.goal).toBe('new goal')
     store.close()
   })
 

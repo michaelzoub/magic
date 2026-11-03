@@ -39,7 +39,7 @@ function createMemoryPersistence(): WorkspacePersistence {
       workspaces.set(input.id, {
         id: input.id,
         name: input.name,
-        description: input.description ?? '',
+        goal: input.goal ?? '',
         icon: input.icon || 'layers',
         listed: input.listed,
         sortOrder: existing?.sortOrder ?? input.sortOrder ?? nextSort++,

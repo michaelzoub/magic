@@ -14,12 +14,12 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
   open: boolean
   ws: State
   onSelect(id: string): void
-  onCreate(name: string, description: string): Promise<string | null>
+  onCreate(name: string, goal: string): Promise<string | null>
   /** Lets the shell detach the native page view while the dropdown is open. */
   onOpenChange?(open: boolean): void
 }) {
   const [menu, setMenu] = useState(false)
-  const [draft, setDraft] = useState<{ name: string; description: string } | null>(null)
+  const [draft, setDraft] = useState<{ name: string; goal: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const setOpen = useCallback(
     (next: boolean) => {
@@ -31,7 +31,7 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
   const close = useCallback(() => (setOpen(false), setDraft(null), setError(null)), [setOpen])
 
   const submit = async () => {
-    const err = await onCreate(draft?.name ?? '', draft?.description ?? '')
+    const err = await onCreate(draft?.name ?? '', draft?.goal ?? '')
     err ? setError(err) : close()
   }
 
@@ -54,19 +54,27 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
       {expanded || menu ? trigger : <Tooltip label="Workspace" side="right">{trigger}</Tooltip>}
       <Popover open={menu} onClose={close} label="Switch workspace" placement={expanded ? 'bottom-start' : 'right-start'}>
         <MenuLabel>Workspaces</MenuLabel>
-        {ws.all.map((w) => (
-          <MenuItem
-            key={w.id}
-            icon={<w.Icon />}
-            label={w.name}
-            detail={w.description || undefined}
-            selected={w.id === ws.activeId}
-            onSelect={() => (onSelect(w.id), close())}
-          />
-        ))}
+        {ws.all.map((w) => {
+          const item = (
+            <MenuItem
+              icon={<w.Icon />}
+              label={w.name}
+              detail={w.goal || undefined}
+              selected={w.id === ws.activeId}
+              onSelect={() => (onSelect(w.id), close())}
+            />
+          )
+          return w.goal ? (
+            <Tooltip key={w.id} label={w.goal} wrap side="right" className="flex w-full">
+              {item}
+            </Tooltip>
+          ) : (
+            <div key={w.id}>{item}</div>
+          )
+        })}
         <MenuDivider />
         {draft === null ? (
-          <MenuItem muted icon={<Plus />} label="Create workspace" onSelect={() => setDraft({ name: '', description: '' })} />
+          <MenuItem muted icon={<Plus />} label="Create workspace" onSelect={() => setDraft({ name: '', goal: '' })} />
         ) : (
           <div className="flex flex-col gap-1 px-1 py-0.5">
             <input
@@ -83,16 +91,17 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
               className={`h-7 w-full rounded-[5px] bg-white/[0.06] px-2 text-white outline-none placeholder:text-white/35
                 ring-1 ${error ? 'ring-red-400/70' : 'ring-white/[0.08] focus:ring-[#5e6ad2]/70'}`}
             />
-            <input
-              value={draft.description}
-              placeholder="Description (optional)"
-              aria-label="Workspace description"
-              onInput={(e) => setDraft({ ...draft, description: e.currentTarget.value })}
+            <textarea
+              value={draft.goal}
+              rows={2}
+              placeholder="Goal: what do you want to get done? (optional)"
+              aria-label="Workspace goal"
+              onInput={(e) => setDraft({ ...draft, goal: e.currentTarget.value })}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') submit()
+                if (e.key === 'Enter' && !e.shiftKey) (e.preventDefault(), submit())
                 if (e.key === 'Escape') (e.stopPropagation(), setDraft(null), setError(null))
               }}
-              className="h-7 w-full rounded-[5px] bg-white/[0.06] px-2 text-white outline-none placeholder:text-white/35
+              className="min-h-11 w-full resize-none rounded-[5px] bg-white/[0.06] px-2 py-1.5 leading-5 text-white outline-none placeholder:text-white/35
                 ring-1 ring-white/[0.08] focus:ring-[#5e6ad2]/70"
             />
             {error && <div className="px-1 pt-0.5 text-[11px] text-red-300">{error}</div>}
@@ -121,7 +130,20 @@ export function WorkspaceList({ open: expanded, ws, onSelect }: { open: boolean;
             {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}
           </button>
         )
-        return expanded ? <div key={w.id}>{button}</div> : <Tooltip key={w.id} label={w.name} side="right">{button}</Tooltip>
+        if (!expanded) {
+          return (
+            <Tooltip key={w.id} label={w.goal || w.name} wrap={!!w.goal} side="right">
+              {button}
+            </Tooltip>
+          )
+        }
+        return w.goal ? (
+          <Tooltip key={w.id} label={w.goal} wrap side="right" className="flex w-full">
+            {button}
+          </Tooltip>
+        ) : (
+          <div key={w.id}>{button}</div>
+        )
       })}
     </>
   )

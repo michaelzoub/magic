@@ -14,6 +14,7 @@ const engine: BrowserEngine = {
   createTab: call('createTab'),
   closeTab: call('closeTab'),
   activateTab: call('activateTab'),
+  switchWorkspace: call('switchWorkspace'),
   navigate: call('navigate'),
   goBack: call('goBack'),
   goForward: call('goForward'),

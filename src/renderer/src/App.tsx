@@ -24,19 +24,15 @@ export function App() {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
 
   /**
-   * Enact a workspace switch: the current tab array is cleared and replaced
-   * with the plan's tabs — never appended to. New tabs are created first so
-   * the array never transiently empties (engines auto-create a blank tab at
-   * zero), then every old tab is closed and the saved active tab focused.
+   * Enact a workspace switch: the target workspace's tabs replace the open
+   * tab array — never appended to. The engine keeps recently used
+   * workspaces' pages alive in the background, so switching back to one
+   * re-shows its live tabs instead of reloading the plan's URLs. `reset`
+   * forces exactly the plan's tabs (Memory restores, launch).
    */
-  const applySwitch = async (plan: WorkspaceSwitchPlan) => {
-    const created: string[] = []
-    for (const tab of plan.tabs) created.push(await engine.createTab(tab.url || undefined))
+  const applySwitch = async (workspaceId: string, plan: WorkspaceSwitchPlan, reset = false) => {
     const active = plan.tabs.findIndex((t) => t.id === plan.activeTabId)
-    if (created[active]) await engine.activateTab(created[active])
-    for (const oldId of plan.closeTabIds) {
-      if (!created.includes(oldId)) await engine.closeTab(oldId)
-    }
+    await engine.switchWorkspace(workspaceId, plan.tabs, Math.max(active, 0), reset)
   }
 
   /** Live tabs as a workspace tab set, for saving under the outgoing workspace. */
@@ -45,16 +41,50 @@ export function App() {
     activeTabId
   })
 
+  /**
+   * Save a workspace transition in Memory as a Before → After checkpoint:
+   * the outgoing workspace's live tabs are the Before, the target workspace
+   * (with the tabs the switch plan is about to open) is the After. Without
+   * this, switches were only written to the SQLite switch history and never
+   * reached Memory — `memory.record` had no caller outside the seed.
+   */
+  const recordTransition = (
+    fromId: string | null,
+    to: { id: string; title: string },
+    current: ReturnType<typeof currentTabSet>,
+    plan: WorkspaceSwitchPlan
+  ) => {
+    const from = fromId ? ws.all.find((w) => w.id === fromId) : undefined
+    if (!from || from.id === to.id) return
+    memory.record({
+      beforeTabs: current.tabs,
+      beforeActiveTabId: current.activeTabId,
+      beforeTitle: from.name,
+      after: { workspaceId: to.id, title: to.title, tabs: plan.tabs, activeTabId: plan.activeTabId }
+    })
+  }
+
   /** Switch workspaces: the target workspace's respective tabs become the open tabs. */
   const selectWorkspace = async (workspaceId: string) => {
-    const plan = ws.select(workspaceId, currentTabSet())
-    if (plan) await applySwitch(plan)
+    const fromId = ws.activeId
+    const target = ws.all.find((w) => w.id === workspaceId)
+    const current = currentTabSet()
+    const plan = ws.select(workspaceId, current)
+    if (plan) {
+      if (target) recordTransition(fromId, { id: target.id, title: target.name }, current, plan)
+      await applySwitch(workspaceId, plan)
+    }
   }
 
   /** Create + switch: a new workspace starts empty; the old tabs stay saved under theirs. */
-  const createWorkspace = async (name: string, description: string): Promise<string | null> => {
-    const { error, plan } = ws.create(name, description, currentTabSet())
-    if (!error && plan) await applySwitch(plan)
+  const createWorkspace = async (name: string, goal: string): Promise<string | null> => {
+    const fromId = ws.activeId
+    const current = currentTabSet()
+    const { error, plan, workspaceId } = ws.create(name, goal, current)
+    if (!error && plan) {
+      if (workspaceId) recordTransition(fromId, { id: workspaceId, title: name.trim() }, current, plan)
+      if (workspaceId) await applySwitch(workspaceId, plan)
+    }
     return error
   }
 
@@ -65,8 +95,8 @@ export function App() {
     if (!ws.ready || restoredTabs.current) return
     restoredTabs.current = true
     const saved = ws.getTabSet(ws.activeId)
-    if (saved.tabs.length > 0) {
-      void applySwitch({ closeTabIds: tabs.map((t) => t.id), tabs: saved.tabs, activeTabId: saved.activeTabId })
+    if (ws.activeId && saved.tabs.length > 0) {
+      void applySwitch(ws.activeId, { closeTabIds: tabs.map((t) => t.id), tabs: saved.tabs, activeTabId: saved.activeTabId }, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws.ready])
@@ -90,8 +120,10 @@ export function App() {
             },
             currentTabSet()
           )
+    // Before restores tabs into the current workspace; After lands on the focus mode.
+    const workspaceId = target === 'before' ? (ws.activeId ?? '') : checkpoint.after.workspaceId
     if (!plan) return
-    await applySwitch(plan)
+    await applySwitch(workspaceId, plan, true)
     setMemoryOpen(false)
   }
 

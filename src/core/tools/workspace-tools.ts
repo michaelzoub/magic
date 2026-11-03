@@ -5,6 +5,8 @@ import { defineTool, ToolError } from './types'
 export interface WorkspaceSummary {
   id: string
   name: string
+  /** What the user wants to get done in this workspace. */
+  goal: string
   active: boolean
 }
 
@@ -15,7 +17,7 @@ export const listWorkspaces = defineTool({
   async execute(_, ctx): Promise<{ workspaces: WorkspaceSummary[] }> {
     const store = requireStore(ctx)
     const activeId = store.getState().activeWorkspaceId
-    return { workspaces: store.list().map((w) => ({ id: w.id, name: w.name, active: w.id === activeId })) }
+    return { workspaces: store.list().map((w) => ({ id: w.id, name: w.name, goal: w.goal, active: w.id === activeId })) }
   }
 })
 
@@ -28,6 +30,6 @@ export const switchWorkspace = defineTool({
     const w = store.get(workspaceId)
     if (!w) throw new ToolError('not_found', `No workspace with id ${workspaceId}`)
     store.switchTo(workspaceId)
-    return { workspace: { id: w.id, name: w.name, active: true } }
+    return { workspace: { id: w.id, name: w.name, goal: w.goal, active: true } }
   }
 })

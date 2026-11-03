@@ -5,7 +5,7 @@ import { Check } from '../icons'
 export function MenuItem({ icon, label, detail, selected, muted, onSelect }: {
   icon?: ReactNode
   label: string
-  /** Secondary text (e.g. a workspace description), truncated after the label. */
+  /** Secondary text (e.g. a workspace goal), truncated after the label; reveal it in full via a tooltip on the row. */
   detail?: string
   selected?: boolean
   muted?: boolean

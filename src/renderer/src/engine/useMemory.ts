@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   createMemoryState,
   listCheckpoints,
@@ -24,9 +24,10 @@ const CODE_FOCUS: RecordReorgInput['after'] = {
 }
 
 /**
- * Mock seed until the agent runtime records real reorgs; swap the initial
- * state for the persisted MemoryState then. Two different Befores landing
- * in the same reused focus mode, as `recordReorg` models it.
+ * Mock seed used only when no persisted Memory exists yet. Two different
+ * Befores landing in the same reused focus mode, as `recordReorg` models it.
+ * Real transitions (recorded via `record` below) are persisted and rehydrated
+ * by `initialState`, replacing the seed's role after the first run.
  */
 function seed(): MemoryState {
   const now = Date.now()
@@ -55,17 +56,55 @@ function seed(): MemoryState {
   return second.state
 }
 
+const STORAGE_KEY = 'magic.memory.v1'
+
+/**
+ * Rehydrate the persisted MemoryState, falling back to the seed. Only the
+ * checkpoints + restored id are stored: `createMemoryState` rebuilds the
+ * before→after transition map from the checkpoints, so it cannot drift.
+ */
+function initialState(): MemoryState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<MemoryState>
+      if (Array.isArray(parsed.checkpoints)) {
+        return createMemoryState({ checkpoints: parsed.checkpoints, restoredCheckpointId: parsed.restoredCheckpointId ?? null })
+      }
+    }
+  } catch {
+    // Corrupt/unavailable storage: fall through to the seed.
+  }
+  return seed()
+}
+
 /** Renderer-side Memory state, driven entirely by the core transitions. */
 export function useMemory() {
-  const [state, setState] = useState<MemoryState>(seed)
+  const [state, setState] = useState<MemoryState>(initialState)
+
+  // Persist every recorded transition/restore so Memory survives a reload.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ checkpoints: state.checkpoints, restoredCheckpointId: state.restoredCheckpointId })
+      )
+    } catch {
+      // Persistence is best-effort; Memory still works for the session.
+    }
+  }, [state])
 
   /** Agent-initiated reorg: save Before + id→id map; caller activates the workspace. */
   const record = useCallback((input: RecordReorgInput) => {
     let transition: ReturnType<typeof recordReorg>['transition'] | null = null
     setState((s) => {
-      const next = recordReorg(s, input)
-      transition = next.transition
-      return next.state
+      try {
+        const next = recordReorg(s, input)
+        transition = next.transition
+        return next.state
+      } catch {
+        return s
+      }
     })
     return transition
   }, [])

@@ -43,7 +43,7 @@ export function Sidebar({ width, onWidth, onToggle, onMemory, onSettings, ws, on
   ws: UseWorkspaces
   /** Switching sets the target workspace's respective tabs as the open tabs (App enacts it). */
   onSelectWorkspace(id: string): void
-  onCreateWorkspace(name: string, description: string): Promise<string | null>
+  onCreateWorkspace(name: string, goal: string): Promise<string | null>
   onWorkspaceMenuOpenChange(open: boolean): void
 }) {
   const [dragging, setDragging] = useState(false)
