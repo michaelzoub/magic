@@ -12,7 +12,7 @@
  *   reuses its workspace's id and title instead of minting new ones.
  * - "Checkpoint" — one recorded Before → After pair, restorable from Memory.
  */
-import type { TabState } from '../../shared/engine'
+import type { TabState } from '@shared/engine'
 import type { TabId, WorkspaceId } from '../workspaces/types'
 
 export type { TabId, WorkspaceId }
