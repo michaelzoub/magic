@@ -5,8 +5,8 @@ describe('buildCompleteOnboardingInput', () => {
   it('maps name/goal to the profile and every other answer to initial settings', () => {
     const input = buildCompleteOnboardingInput({ name: ' Ada ', goal: 'Focus', theme: 'dark', level: 2 }, 1000)
     expect(input).toEqual({
-      profile: { displayName: 'Ada', goal: 'Focus' },
-      settings: { defaultGoal: 'Focus', theme: 'dark', level: 2 },
+      profile: { displayName: 'Ada', goal: 'Focus', identitySeed: expect.stringMatching(/^v1\.[0-9a-f]{8}$/) },
+      settings: { defaultGoal: 'Focus', identityInputs: expect.any(Array), theme: 'dark', level: 2 },
       completedAt: 1000
     })
   })
@@ -17,8 +17,8 @@ describe('buildCompleteOnboardingInput', () => {
       1000
     )
     expect(input).toEqual({
-      profile: { displayName: 'Alex', goal: 'Focus' },
-      settings: { defaultGoal: 'Focus', description: 'A student and builder.' },
+      profile: { displayName: 'Alex', goal: 'Focus', identitySeed: expect.stringMatching(/^v1\.[0-9a-f]{8}$/) },
+      settings: { defaultGoal: 'Focus', identityInputs: expect.any(Array), description: 'A student and builder.' },
       completedAt: 1000
     })
     expect(() => buildCompleteOnboardingInput({ welcome: { name: ' ', description: 'x' } })).toThrow(/requires a name/)
@@ -38,9 +38,12 @@ describe('buildCompleteOnboardingInput', () => {
       },
       1000
     )
-    expect(input.profile).toEqual({ displayName: 'Alex', goal: 'Ship v2' })
+    expect(input.profile).toEqual({
+      displayName: 'Alex', goal: 'Ship v2', identitySeed: expect.stringMatching(/^v1\.[0-9a-f]{8}$/)
+    })
     expect(input.settings).toEqual({
       defaultGoal: 'Ship v2',
+      identityInputs: expect.any(Array),
       description: 'A builder.',
       goals: [
         { name: 'Work', goal: 'Ship v2' },

@@ -16,6 +16,8 @@ function createMemoryPersistence(): OnboardingPersistence {
         profile: {
           displayName: input.profile.displayName.trim(),
           goal: input.profile.goal ?? '',
+          // First identity wins, mirroring the SQLite store.
+          identitySeed: stored?.profile.identitySeed ?? input.profile.identitySeed ?? null,
           onboardingCompletedAt: stored?.profile.onboardingCompletedAt ?? now,
           createdAt: stored?.profile.createdAt ?? now,
           updatedAt: now
@@ -27,6 +29,16 @@ function createMemoryPersistence(): OnboardingPersistence {
     },
     async loadOnboarding() {
       return stored ? structuredClone(stored) : null
+    },
+    async updateProfile(input) {
+      if (!stored) throw new Error('No profile to update')
+      const displayName = input.displayName.trim()
+      if (!displayName) throw new Error('Profile display name is required')
+      stored = {
+        profile: { ...stored.profile, displayName, updatedAt: Date.now() },
+        settings: { ...stored.settings, description: input.description.trim() }
+      }
+      return structuredClone(stored)
     }
   }
 }

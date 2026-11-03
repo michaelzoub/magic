@@ -6,7 +6,8 @@ import type {
   WorkspaceSwitchRecord,
   RecordSwitchInput
 } from '@shared/workspaces'
-import type { CompletedOnboarding, CompleteOnboardingInput, InitialSettings, UserProfile } from '@shared/onboarding'
+import type { CompletedOnboarding, CompleteOnboardingInput, InitialSettings, UpdateProfileInput, UserProfile } from '@shared/onboarding'
+import { identitySeedForProfile } from '@core/identity'
 
 type UpsertInput = Parameters<import('@shared/workspaces').WorkspacePersistence['upsertWorkspace']>[0]
 
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS user_profile (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   display_name TEXT NOT NULL,
   goal TEXT NOT NULL DEFAULT '',
+  identity_seed TEXT,
   onboarding_completed_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -90,6 +92,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 interface ProfileRow {
   display_name: string
   goal: string
+  identity_seed: string | null
   onboarding_completed_at: number | null
   created_at: number
   updated_at: number
@@ -138,6 +141,14 @@ export class SqliteWorkspaceStore {
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
     this.db.exec(SCHEMA)
     this.migrateGoalColumn()
+    this.migrateIdentityColumn()
+  }
+
+  /** Pre-identity databases have no seed column; add it (existing rows are backfilled on load). */
+  private migrateIdentityColumn(): void {
+    const columns = this.db.prepare('PRAGMA table_info(user_profile)').all() as unknown as { name: string }[]
+    if (columns.length === 0 || columns.some((c) => c.name === 'identity_seed')) return
+    this.db.exec('ALTER TABLE user_profile ADD COLUMN identity_seed TEXT')
   }
 
   /** Pre-goal databases stored the same text in `description`; rename it in place so existing values survive. */
@@ -202,6 +213,23 @@ export class SqliteWorkspaceStore {
       )
   }
 
+  /** Delete a workspace and its saved tabs (FK cascade); clears the active id when it pointed at it. Switch history is kept. */
+  deleteWorkspace(workspaceId: string): void {
+    if (!workspaceId) throw new Error('Workspace id is required')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(workspaceId)
+      if (result.changes === 0) throw new Error(`No workspace with id ${workspaceId}`)
+      if (this.getActiveId() === workspaceId) {
+        this.db.prepare("DELETE FROM app_state WHERE key = 'active_workspace_id'").run()
+      }
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+  }
+
   /**
    * Record one switch: append the before → after row, mark the target
    * listed + active, stamp its `last_switched_at`, and save the outgoing
@@ -258,14 +286,15 @@ export class SqliteWorkspaceStore {
     try {
       this.db
         .prepare(
-          `INSERT INTO user_profile (id, display_name, goal, onboarding_completed_at, created_at, updated_at)
-           VALUES (1, ?, ?, ?, ?, ?)
+          `INSERT INTO user_profile (id, display_name, goal, identity_seed, onboarding_completed_at, created_at, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              display_name = excluded.display_name, goal = excluded.goal,
+             identity_seed = COALESCE(user_profile.identity_seed, excluded.identity_seed),
              onboarding_completed_at = COALESCE(user_profile.onboarding_completed_at, excluded.onboarding_completed_at),
              updated_at = excluded.updated_at`
         )
-        .run(displayName, input.profile.goal ?? '', completedAt, completedAt, completedAt)
+        .run(displayName, input.profile.goal ?? '', input.profile.identitySeed ?? null, completedAt, completedAt, completedAt)
       const seedSetting = this.db.prepare(
         `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO NOTHING`
@@ -281,12 +310,54 @@ export class SqliteWorkspaceStore {
     return this.loadOnboarding()!
   }
 
+  /**
+   * Update the existing singleton profile in place: only the display name
+   * (on `user_profile`) and the `description` setting change, in one
+   * transaction. The identity seed, goal, timestamps from onboarding, every
+   * other setting (including the canonical identity inputs behind the
+   * totem), and all workspaces are left untouched, so the totem and the
+   * rest of the app state survive an edit unchanged.
+   */
+  updateProfile(input: UpdateProfileInput): CompletedOnboarding {
+    const displayName = input.displayName?.trim()
+    if (!displayName) throw new Error('Profile display name is required')
+    const description = typeof input.description === 'string' ? input.description.trim() : ''
+    const now = Date.now()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = this.db
+        .prepare('UPDATE user_profile SET display_name = ?, updated_at = ? WHERE id = 1')
+        .run(displayName, now)
+      if (result.changes === 0) throw new Error('No profile to update')
+      this.db
+        .prepare(
+          `INSERT INTO app_settings (key, value, updated_at) VALUES ('description', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+        )
+        .run(JSON.stringify(description), now)
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+    return this.loadOnboarding()!
+  }
+
   loadOnboarding(): CompletedOnboarding | null {
     const row = this.db.prepare('SELECT * FROM user_profile WHERE id = 1').get() as unknown as ProfileRow | undefined
     if (!row) return null
+    // Backfill profiles saved before identities existed, deterministically
+    // from the stored profile itself, and persist it so the identity is
+    // stable from then on (not re-derived if the profile later changes).
+    let identitySeed = row.identity_seed
+    if (!identitySeed) {
+      identitySeed = identitySeedForProfile({ displayName: row.display_name, goal: row.goal, createdAt: row.created_at })
+      this.db.prepare('UPDATE user_profile SET identity_seed = ? WHERE id = 1 AND identity_seed IS NULL').run(identitySeed)
+    }
     const profile: UserProfile = {
       displayName: row.display_name,
       goal: row.goal,
+      identitySeed,
       onboardingCompletedAt: row.onboarding_completed_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at

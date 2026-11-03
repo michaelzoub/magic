@@ -181,13 +181,36 @@ export function useWorkspaces() {
     [board, persistSwitch]
   )
 
+  /**
+   * Delete a workspace everywhere: board (plus its saved tabs), then the
+   * persisted row. When the active workspace is deleted the board lands on
+   * a fallback; that landing is persisted as a switch (without saving the
+   * deleted workspace's tabs) so the stored active id never dangles.
+   * Returns the tab plan to enact and the fallback's id (null when none).
+   */
+  const deleteWorkspace = useCallback(
+    (id: string, current: WorkspaceTabSet): { plan: WorkspaceTabSwitch | null; workspaceId: string | null } => {
+      const wasActive = board.activeId === id
+      const { workspace: next, replaceTabs } = board.remove(id, current)
+      save(async () => {
+        await persistence.deleteWorkspace(id)
+        if (wasActive && next) {
+          await persistence.upsertWorkspace(toRecord(next, true))
+          await persistence.recordSwitch({ fromWorkspaceId: id, toWorkspaceId: next.id, switchedAt: Date.now() })
+        }
+      })
+      return { plan: replaceTabs, workspaceId: next?.id ?? null }
+    },
+    [board]
+  )
+
   /** Saved open tabs of a workspace (empty until seeded or visited); used to restore on launch. */
   const getTabSet = useCallback(
     (id: string | null): WorkspaceTabSet => (id ? board.getTabSet(id) : { tabs: [], activeTabId: null }),
     [board]
   )
 
-  return { all: board.workspaces, list: board.listedWorkspaces, activeId: board.activeId, ready, getTabSet, select, create, ensureAndSwitch }
+  return { all: board.workspaces, list: board.listedWorkspaces, activeId: board.activeId, ready, getTabSet, select, create, deleteWorkspace, ensureAndSwitch }
 }
 
 export type UseWorkspaces = ReturnType<typeof useWorkspaces>

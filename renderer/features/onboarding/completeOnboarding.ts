@@ -1,5 +1,5 @@
 import { buildCompleteOnboardingInput, type OnboardingData } from '@core/onboarding'
-import type { CompletedOnboarding } from '@shared/onboarding'
+import type { CompletedOnboarding, UpdateProfileInput } from '@shared/onboarding'
 import { onboardingPersistence } from '@/adapters/onboarding-persistence'
 
 /**
@@ -19,4 +19,9 @@ export async function completeOnboarding(data: Readonly<OnboardingData>): Promis
 /** Stored profile + settings, or null when onboarding never completed. */
 export async function loadOnboarding(): Promise<CompletedOnboarding | null> {
   return onboardingPersistence.loadOnboarding()
+}
+
+/** Update the existing local profile in place; returns what was stored. */
+export async function updateProfile(input: UpdateProfileInput): Promise<CompletedOnboarding> {
+  return onboardingPersistence.updateProfile(input)
 }

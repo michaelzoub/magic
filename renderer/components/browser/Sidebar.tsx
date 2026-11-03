@@ -3,9 +3,11 @@ import type { ReactNode, SVGProps } from 'react'
 import { ChevronUpDown, Memory, Plus, Settings, SidebarIcon } from '../ui/icons'
 import { MagicMark, MagicWordmark } from '../ui/Brand'
 import { Tooltip } from '../ui'
-import { IconSlot, WorkspaceList, WorkspaceMenu, sidebarRow } from '../workspaces/WorkspaceSwitcher'
+import { CountBadge, IconSlot, WorkspaceList, WorkspaceMenu, sidebarRow } from '../workspaces/WorkspaceSwitcher'
 import type { UseWorkspaces } from '@/hooks/useWorkspaces'
 import { motion } from '@/motion'
+import type { IdentitySpec } from '@core/identity'
+import { PixelTotem } from '@/features/identity'
 
 /**
  * Side panel with exactly two fixed states: expanded (248px) and the
@@ -37,8 +39,6 @@ const primary: Item[] = [
   { label: 'Memory', Icon: Memory },
 ]
 
-const pad = (n: number) => String(n).padStart(2, '0')
-
 function RailButton({ label, open, count, onClick, children }: { label: string; open: boolean; count?: number; onClick?(): void; children: ReactNode }) {
   const button = (
     <button
@@ -49,7 +49,7 @@ function RailButton({ label, open, count, onClick, children }: { label: string; 
     >
       <IconSlot>{children}</IconSlot>
       {open && <span className="truncate">{label}</span>}
-      {open && count !== undefined && <span className="ml-auto text-xs tabular-nums text-chrome-faint">{pad(count)}</span>}
+      {open && count !== undefined && <CountBadge count={count} />}
     </button>
   )
   // Labels are visible when expanded, so tooltips only help on the rail.
@@ -60,9 +60,11 @@ function RailButton({ label, open, count, onClick, children }: { label: string; 
  *  to full width that no label renders truncated mid-tween. */
 const LABEL_REVEAL_WIDTH = 205
 
-export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, onSettings, ws, onSelectWorkspace, onCreateWorkspace }: {
+export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, onSettings, profile, ws, onSelectWorkspace, onCreateWorkspace, onDeleteWorkspace }: {
   open: boolean
   onToggle(): void
+  /** Local user profile for the account row: display name + totem spec (null before onboarding completes). */
+  profile?: { displayName: string; identity: IdentitySpec | null } | null
   /** Animated panel width, reported every tween frame (and once on mount)
    *  so the shell can move width-dependent chrome (tab-strip inset) in
    *  sync instead of snapping it. Direct DOM writes only — no re-render. */
@@ -74,8 +76,16 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
   /** Switching sets the target workspace's respective tabs as the open tabs (App enacts it). */
   onSelectWorkspace(id: string): void
   onCreateWorkspace(name: string, goal: string): Promise<string | null>
+  onDeleteWorkspace(id: string): void
 }) {
   const openWorkspaceMenu = () => document.querySelector<HTMLButtonElement>('[data-workspace-menu]')?.click()
+  // Whether the Workspaces overview (menu) is open: while it is, the
+  // "Workspaces" nav row owns the strong selected state and the active
+  // workspace row in the list below drops to a subtler current marker.
+  const [workspaceOverviewOpen, setWorkspaceOverviewOpen] = useState(false)
+  // Incremented when the profile row is opened: plays one finite pulse on
+  // the totem (PixelTotem owns the tween; nothing renders continuously).
+  const [profilePulse, setProfilePulse] = useState(0)
   const asideRef = useRef<HTMLElement>(null)
   const widthChangeRef = useRef(onWidthChange)
   widthChangeRef.current = onWidthChange
@@ -132,8 +142,9 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
       className="relative flex shrink-0 flex-col overflow-hidden border-r border-chrome-border/[0.09] bg-chrome-bg px-2.5 pb-3"
     >
       {/* Window drag strip: reserved for the macOS traffic lights, which
-          are painted by the OS over this corner. No visible element may
-          live in it — the brand lockup starts below it. */}
+          AppKit paints over this corner (standard window buttons — the
+          same implementation Chrome uses, see main/index.ts). No visible
+          element may live in it — the brand lockup starts below it. */}
       <div className="drag h-[44px] shrink-0" />
 
       {/* Panel toggle above the brand lockup. It is a plain sidebar row
@@ -166,7 +177,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
       </div>
 
       <nav className="flex flex-col gap-1">
-        <WorkspaceMenu open={labels} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} />
+        <WorkspaceMenu open={labels} menuOpen={workspaceOverviewOpen} onMenuOpenChange={setWorkspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} onDelete={onDeleteWorkspace} />
         {primary.map(({ label, Icon }) => (
           <RailButton key={label} label={label} open={labels} count={label === 'Memory' ? memoryCount : undefined} onClick={label === 'Memory' ? onMemory : undefined}>
             <Icon />
@@ -200,7 +211,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
               <Plus className="h-3.5 w-3.5" />
             </RailButton>
           )}
-          <WorkspaceList open={labels} ws={ws} onSelect={onSelectWorkspace} />
+          <WorkspaceList open={labels} overviewOpen={workspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} />
         </section>
       )}
 
@@ -214,15 +225,21 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
           <button
             type="button"
             aria-label="Account"
-            onClick={(e) => (motion.press(e.currentTarget), onSettings())}
+            onClick={(e) => (motion.press(e.currentTarget), setProfilePulse((n) => n + 1), onSettings())}
             className={`${sidebarRow} text-left`}
           >
             <IconSlot>
-              <Settings />
+              {profile?.identity ? (
+                <PixelTotem spec={profile.identity} size={16} pulseKey={profilePulse} className="rounded-[4px]" />
+              ) : (
+                <Settings />
+              )}
             </IconSlot>
             {labels && (
               <>
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-chrome-text">Personal</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-chrome-text">
+                  {profile?.displayName || 'Personal'}
+                </span>
                 <ChevronUpDown className="shrink-0 text-chrome-faint" />
               </>
             )}

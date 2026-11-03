@@ -9,7 +9,7 @@ import { SqliteWorkspaceStore } from './db/workspace-db'
 import { TooltipOverlay } from './browser/tooltip-overlay'
 import { FloatingOverlay } from './browser/floating-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
-import { ONBOARDING_IPC, type CompleteOnboardingInput } from '@shared/onboarding'
+import { ONBOARDING_IPC, type CompleteOnboardingInput, type UpdateProfileInput } from '@shared/onboarding'
 import { AGENT_IPC, type WorkspaceSwitchNotice } from '@shared/agent'
 import { EmbeddedAgentHost } from './agent/host'
 
@@ -34,10 +34,13 @@ function createWindow(): void {
     minHeight: 420,
     show: false,
     title: 'Magic',
+    // Native macOS traffic lights, Chrome-style: hiddenInset titlebar,
+    // buttons centred in the renderer's reserved 44px drag strip.
     titleBarStyle: 'hiddenInset',
-    // Centred in the renderer's reserved 44px titlebar strip (Sidebar's
-    // drag strip / App's header), which no visible element enters.
     trafficLightPosition: { x: 14, y: 16 },
+    // Open fullscreen; the native buttons/menu reveal on hover at the
+    // top edge, same as Chrome in fullscreen.
+    fullscreen: true,
     vibrancy: 'sidebar',
     visualEffectState: 'followWindow',
     backgroundColor: '#00000000',
@@ -107,6 +110,7 @@ const workspaces = (): SqliteWorkspaceStore =>
 
 ipcMain.handle(WORKSPACE_IPC.load, () => workspaces().loadSnapshot())
 ipcMain.handle(WORKSPACE_IPC.upsert, (_e, record: Parameters<SqliteWorkspaceStore['upsertWorkspace']>[0]) => workspaces().upsertWorkspace(record))
+ipcMain.handle(WORKSPACE_IPC.delete, (_e, workspaceId: string) => workspaces().deleteWorkspace(workspaceId))
 ipcMain.handle(WORKSPACE_IPC.recordSwitch, (_e, input: RecordSwitchInput) => workspaces().recordSwitch(input))
 ipcMain.handle(WORKSPACE_IPC.saveTabSet, (_e, workspaceId: string, tabSet: PersistedTabSet) => workspaces().saveTabSet(workspaceId, tabSet))
 ipcMain.handle(WORKSPACE_IPC.listSwitches, (_e, limit?: number) => workspaces().listSwitches(limit))
@@ -121,6 +125,7 @@ ipcMain.handle(AGENT_IPC.workspaceSwitched, (e, notice: WorkspaceSwitchNotice) =
 
 ipcMain.handle(ONBOARDING_IPC.complete, (_e, input: CompleteOnboardingInput) => workspaces().completeOnboarding(input))
 ipcMain.handle(ONBOARDING_IPC.load, () => workspaces().loadOnboarding())
+ipcMain.handle(ONBOARDING_IPC.updateProfile, (_e, input: UpdateProfileInput) => workspaces().updateProfile(input))
 
 ipcMain.handle(IMPORT_IPC.detect, () => detectSources())
 ipcMain.handle(IMPORT_IPC.importLogins, (_e, sourceId: string) => importLogins(session.defaultSession, sourceId))

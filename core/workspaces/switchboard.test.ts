@@ -121,6 +121,56 @@ describe('WorkspaceSwitchboard.hydrate — restoring persisted state', () => {
   })
 })
 
+describe('WorkspaceSwitchboard.remove — deleting workspaces', () => {
+  const tab = (id: string) => ({ id, title: id, url: `https://${id}.example/` })
+
+  it('removes a non-active workspace and its saved tabs without touching the open tabs', () => {
+    const board = seed()
+    board.switchTo('work')
+    board.switchTo('school', { tabs: [tab('w-live')], activeTabId: 'w-live' })
+    const result = board.remove('work')
+    expect(result).toEqual({ workspace: null, replaceTabs: null })
+    expect(board.workspaces.map((w) => w.id)).toEqual(['personal', 'school'])
+    expect(board.listedIds).toEqual(['school'])
+    expect(board.activeId).toBe('school')
+    expect(() => board.getTabSet('work')).toThrow(/No workspace/)
+  })
+
+  it('deleting the active workspace lands on the first listed fallback with its tabs', () => {
+    const board = new WorkspaceSwitchboard([
+      { id: 'personal', name: 'Personal', tabs: [tab('p1')], activeTabId: 'p1' },
+      { id: 'work', name: 'Work', tabs: [tab('w1')], activeTabId: 'w1' },
+      { id: 'school', name: 'School' }
+    ])
+    board.switchTo('personal')
+    board.switchTo('work')
+    const { workspace, replaceTabs } = board.remove('work', { tabs: [tab('w-live')], activeTabId: 'w-live' })
+    expect(workspace?.id).toBe('personal')
+    expect(board.activeId).toBe('personal')
+    expect(board.listedIds).toEqual(['personal'])
+    // The deleted workspace's live tabs are discarded, not saved anywhere.
+    expect(replaceTabs).toEqual({ closeTabIds: ['w-live'], tabs: [tab('p1')], activeTabId: 'p1' })
+  })
+
+  it('deleting the last workspace leaves none active and closes every open tab', () => {
+    const board = new WorkspaceSwitchboard([{ id: 'solo', name: 'Solo' }])
+    board.switchTo('solo')
+    const { workspace, replaceTabs } = board.remove('solo', { tabs: [tab('s1')], activeTabId: 's1' })
+    expect(workspace).toBeNull()
+    expect(replaceTabs).toEqual({ closeTabIds: ['s1'], tabs: [], activeTabId: null })
+    expect(board.activeId).toBeNull()
+    expect(board.workspaces).toEqual([])
+  })
+
+  it('rejects unknown ids and changes nothing', () => {
+    const board = seed()
+    board.switchTo('work')
+    expect(() => board.remove('nope')).toThrow(/No workspace/)
+    expect(board.activeId).toBe('work')
+    expect(board.workspaces).toHaveLength(3)
+  })
+})
+
 describe('WorkspaceSwitchboard creation / external switches', () => {
   it('addAndSwitch registers, lists, and activates the new workspace', () => {
     const board = seed()

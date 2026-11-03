@@ -5,6 +5,8 @@ import { MemoryDialog } from '@/components/memory/MemoryDialog'
 import { ImportLoginsDialog } from '@/components/imports/ImportLoginsDialog'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { createOnboarding } from '@/features/onboarding/onboarding'
+import { OnboardingTotemPreview, OnboardingTotemReveal, ProfileIdentityDialog } from '@/features/identity'
+import { updateProfile } from '@/features/onboarding/completeOnboarding'
 import { WorkspaceMenuContent } from '@/components/workspaces/WorkspaceSwitcher'
 import { surface } from '@/components/ui/surface'
 
@@ -52,6 +54,24 @@ export function OverlayApp() {
     )
   }
 
+  if (req.kind === 'profile') {
+    return (
+      <ProfileIdentityDialog
+        open
+        completed={req.completed}
+        onClose={() => close('profile')}
+        onImportLogins={() => setReq({ kind: 'import' })}
+        onSaveProfile={async (input) => {
+          const updated = await updateProfile(input)
+          setReq({ kind: 'profile', completed: updated })
+          // Tell the shell so its sidebar name + stored profile update too.
+          await host.requestAction({ type: 'profile:updated', completed: updated })
+          return updated
+        }}
+      />
+    )
+  }
+
   if (req.kind === 'import') {
     return (
       <ImportLoginsDialog
@@ -70,16 +90,30 @@ export function OverlayApp() {
         open
         onClose={() => close('onboarding')}
         title="Welcome to Magic"
+        renderPreview={(data, progress) => <OnboardingTotemPreview data={data} progress={progress} />}
+        renderCompletion={(data) => <OnboardingTotemReveal data={data} />}
       />
     )
   }
 
-  return <WorkspaceMenuSurface req={req} onClose={() => close('workspace-menu')} />
+  return (
+    <WorkspaceMenuSurface
+      req={req}
+      onClose={() => close('workspace-menu')}
+      onDeleted={(id, activeId) =>
+        setReq((r) =>
+          r?.kind === 'workspace-menu' ? { ...r, workspaces: r.workspaces.filter((w) => w.id !== id), activeId } : r
+        )
+      }
+    />
+  )
 }
 
-function WorkspaceMenuSurface({ req, onClose }: {
+function WorkspaceMenuSurface({ req, onClose, onDeleted }: {
   req: Extract<SurfaceRequest, { kind: 'workspace-menu' }>
   onClose(): void
+  /** Drop the deleted row locally (the shell does not re-push the menu) and adopt the fallback active id. */
+  onDeleted(id: string, activeId: string | null): void
 }) {
   const host = window.overlayHost!
   const panelRef = useRef<HTMLDivElement>(null)
@@ -116,6 +150,10 @@ function WorkspaceMenuSurface({ req, onClose }: {
             const err = (await host.requestAction({ type: 'workspace:create', name, goal })) as string | null
             if (!err) onClose()
             return err
+          }}
+          onDelete={async (id) => {
+            const activeId = (await host.requestAction({ type: 'workspace:delete', id })) as string | null
+            onDeleted(id, activeId)
           }}
         />
       </div>

@@ -18,6 +18,13 @@ export interface UserProfile {
   displayName: string
   /** Primary goal collected during onboarding ('' when not asked). */
   goal: string
+  /**
+   * Procedural identity seed (see core/identity), generated deterministically
+   * from the onboarding choices at first completion and then preserved —
+   * re-running onboarding never mints a new identity. Null only for rows
+   * that predate the column and have not been loaded/backfilled yet.
+   */
+  identitySeed: string | null
   /** When onboarding was first completed; null before that. */
   onboardingCompletedAt: number | null
   createdAt: number
@@ -28,6 +35,8 @@ export interface CompleteOnboardingInput {
   profile: {
     displayName: string
     goal: string
+    /** Identity seed derived from the answers; first persisted value wins. */
+    identitySeed?: string
   }
   /** Seeded only on first completion for keys that have no value yet. */
   settings: InitialSettings
@@ -40,14 +49,28 @@ export interface CompletedOnboarding {
   settings: InitialSettings
 }
 
+/** Editable local-profile fields. Everything else on the profile is preserved. */
+export interface UpdateProfileInput {
+  displayName: string
+  /** The one-sentence description shown under the name (stored as the `description` setting). */
+  description: string
+}
+
 export interface OnboardingPersistence {
   /** Save the user profile + initial settings atomically; returns what was stored. */
   completeOnboarding(input: CompleteOnboardingInput): Promise<CompletedOnboarding>
   /** Stored profile + settings, or null when onboarding never completed. */
   loadOnboarding(): Promise<CompletedOnboarding | null>
+  /**
+   * Update the existing singleton profile in place (display name +
+   * description only); returns what was stored. The identity seed and all
+   * other profile fields, settings, and onboarding data are preserved.
+   */
+  updateProfile(input: UpdateProfileInput): Promise<CompletedOnboarding>
 }
 
 export const ONBOARDING_IPC = {
   complete: 'onboarding:complete',
-  load: 'onboarding:load'
+  load: 'onboarding:load',
+  updateProfile: 'onboarding:update-profile'
 } as const

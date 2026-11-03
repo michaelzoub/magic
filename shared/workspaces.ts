@@ -70,6 +70,8 @@ export interface WorkspacePersistence {
   load(): Promise<WorkspaceSnapshot | null>
   /** Insert or update a workspace (selection touches it, creation adds it). */
   upsertWorkspace(workspace: Omit<WorkspaceRecord, 'sortOrder' | 'createdAt' | 'updatedAt'> & Partial<Pick<WorkspaceRecord, 'sortOrder' | 'createdAt' | 'updatedAt'>>): Promise<void>
+  /** Delete a workspace, its saved tabs, and (if it was active) the active id. */
+  deleteWorkspace(workspaceId: string): Promise<void>
   /** Append a before → after switch and make the target active + listed. */
   recordSwitch(input: RecordSwitchInput): Promise<void>
   saveTabSet(workspaceId: string, tabSet: PersistedTabSet): Promise<void>
@@ -79,6 +81,7 @@ export interface WorkspacePersistence {
 export const WORKSPACE_IPC = {
   load: 'workspaces:load',
   upsert: 'workspaces:upsert',
+  delete: 'workspaces:delete',
   recordSwitch: 'workspaces:record-switch',
   saveTabSet: 'workspaces:save-tab-set',
   listSwitches: 'workspaces:list-switches'

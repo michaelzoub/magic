@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { OnboardingStep } from '@core/onboarding'
 import type { OnboardingData, OnboardingFlow } from '@core/onboarding'
 import { Dialog } from '@/components/ui'
@@ -35,29 +35,63 @@ const btn =
  * "Step X of N" progress bar (N = flow.totalSteps), Back/Next navigation,
  * and a final Save that calls the flow's injected `onSave` once.
  */
-export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Welcome' }: {
+export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Welcome', renderPreview, renderCompletion }: {
   flow: OnboardingFlow
   open: boolean
   onClose(): void
   onComplete?(data: Readonly<OnboardingData>): void
   title?: string
+  /** Live preview (e.g. the assembling identity totem), re-rendered with the collected answers + progress on every flow change. */
+  renderPreview?(data: Readonly<OnboardingData>, progress: number): ReactNode
+  /** Completion stage shown briefly after a successful save (e.g. the identity reveal) before the wizard closes. */
+  renderCompletion?(data: Readonly<OnboardingData>): ReactNode
 }) {
   const [, rerender] = useState(0)
   useEffect(() => flow.subscribe(() => rerender((n) => n + 1)), [flow])
+  const [revealing, setRevealing] = useState(false)
 
   const step = flow.currentStep
   const StepUI = step?.ui as OnboardingStepComponent | undefined
   const { current, total, fraction } = flow.progress
   const saving = flow.status === 'saving'
 
+  const finish = () => {
+    setRevealing(false)
+    onComplete?.(flow.collectedData)
+    onClose()
+  }
+
+  // Hold the completion stage briefly (the reveal animation), then enter
+  // the app. Reduced motion gets a near-instant, static reveal.
+  useEffect(() => {
+    if (!revealing) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const timer = setTimeout(finish, reduced ? 300 : 1800)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealing])
+
   const advance = async () => {
     const wasLast = flow.isLast
     if (await flow.next()) {
       if (wasLast) {
-        onComplete?.(flow.collectedData)
-        onClose()
+        if (renderCompletion) setRevealing(true)
+        else finish()
       }
     }
+  }
+
+  if (revealing && renderCompletion) {
+    return (
+      <Dialog open={open} onClose={finish} label={title} hideHeader>
+        {renderCompletion(flow.collectedData)}
+        <footer className="flex items-center justify-center px-4 pb-4">
+          <button type="button" onClick={finish} className={`${btn} bg-white text-black hover:bg-white/85`}>
+            Enter Magic
+          </button>
+        </footer>
+      </Dialog>
+    )
   }
 
   return (
@@ -70,6 +104,7 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full rounded-full bg-white/70 transition-all" style={{ width: `${fraction * 100}%` }} />
         </div>
+        {renderPreview && <div className="mt-3">{renderPreview(flow.collectedData, fraction)}</div>}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

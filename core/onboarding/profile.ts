@@ -1,4 +1,5 @@
 import type { CompleteOnboardingInput, InitialSettings, SettingValue } from '@shared/onboarding'
+import { identityPartEntriesFromOnboarding, identitySeedFromOnboarding } from '@core/identity'
 import type { OnboardingData } from './types'
 
 /**
@@ -84,6 +85,12 @@ export function buildCompleteOnboardingInput(
   const goal = goalsWithSites.find((g) => g.goal)?.goal ?? (typeof data.goal === 'string' ? data.goal : '')
 
   const settings: InitialSettings = { defaultGoal: goal }
+  // Canonical identity inputs (the exact decisions mixed into the seed), so
+  // the Settings influence view can explain the *original* choices — the
+  // processed goals/sites settings below have sites concatenated in and
+  // cannot reproduce them. Seed-only like every setting: first completion's
+  // inputs are kept, matching the first-wins persisted seed.
+  settings.identityInputs = identityPartEntriesFromOnboarding(data) as unknown as SettingValue
   if (description) settings.description = description
   if (Array.isArray(rawGoals)) settings.goals = goalsWithSites as SettingValue
   if (Object.keys(sites).length > 0) settings.sites = sites as SettingValue
@@ -92,5 +99,8 @@ export function buildCompleteOnboardingInput(
     if (!isSettingValue(value)) throw new Error(`Onboarding answer "${key}" is not JSON-serializable`)
     settings[key] = value
   }
-  return { profile: { displayName, goal }, settings, completedAt }
+  // The identity seed is derived deterministically from the full answer set
+  // (name, description, areas/goals, sites); the store keeps the first one
+  // it persists, so this value only takes effect on first completion.
+  return { profile: { displayName, goal, identitySeed: identitySeedFromOnboarding(data) }, settings, completedAt }
 }
