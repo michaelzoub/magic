@@ -4,8 +4,8 @@ export type TooltipSide = 'top' | 'right' | 'bottom'
 
 export interface TooltipRequest {
   label: string
-  /** Optional longer text shown wrapped under the label (e.g. a workspace's full goal). */
-  body?: string
+  /** Wrap the label over multiple lines instead of keeping it on one nowrap line. */
+  wrap?: boolean
   shortcut?: string
   side: TooltipSide
   /** Anchor element rect, in window CSS pixels. */

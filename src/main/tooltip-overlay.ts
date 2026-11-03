@@ -10,9 +10,7 @@ html,body{margin:0;background:transparent;overflow:hidden}
 #t{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border-radius:5px;padding:4px 8px;
 background:#262626;color:#fff;font:500 11px/16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
 box-shadow:0 0 0 .5px rgb(255 255 255/.06);opacity:0;transition:opacity 100ms ease-out}
-#t.card{display:block;width:max-content;max-width:240px;white-space:normal;border-radius:8px;padding:8px 10px}
-#t .h{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgb(255 255 255/.45);margin-bottom:2px}
-#t .b{font-size:12px;line-height:16px}
+#t.wrap{display:block;width:max-content;max-width:240px;white-space:normal}
 #t.on{opacity:1}kbd{font:inherit;color:rgb(255 255 255/.45)}
 </style></head><body><div id="t"></div></body></html>`
 
@@ -26,23 +24,15 @@ export class TooltipOverlay {
     this.view.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(HTML)}`)
   }
 
-  async show({ label, body, shortcut, side, anchor }: TooltipRequest): Promise<void> {
+  async show({ label, wrap, shortcut, side, anchor }: TooltipRequest): Promise<void> {
     const seq = ++this.seq
     const wc = this.view.webContents
     if (wc.isDestroyed()) return
     const size: { width: number; height: number } = await wc.executeJavaScript(`(() => {
-      const t = document.getElementById('t'); t.className = ''; t.textContent = ''
-      const b = ${JSON.stringify(body ?? '')}
-      if (b) {
-        t.classList.add('card')
-        const h = document.createElement('div'); h.className = 'h'; h.textContent = ${JSON.stringify(label)}
-        const p = document.createElement('div'); p.className = 'b'; p.textContent = b
-        t.append(h, p)
-      } else {
-        t.textContent = ${JSON.stringify(label)}
-        const s = ${JSON.stringify(shortcut ?? '')}
-        if (s) { const k = document.createElement('kbd'); k.textContent = s; t.append(k) }
-      }
+      const t = document.getElementById('t'); t.className = ''; t.textContent = ${JSON.stringify(label)}
+      if (${JSON.stringify(!!wrap)}) t.classList.add('wrap')
+      const s = ${JSON.stringify(shortcut ?? '')}
+      if (s) { const k = document.createElement('kbd'); k.textContent = s; t.append(k) }
       const r = t.getBoundingClientRect(); return { width: Math.ceil(r.width), height: Math.ceil(r.height) }
     })()`)
     if (seq !== this.seq || this.window.isDestroyed()) return

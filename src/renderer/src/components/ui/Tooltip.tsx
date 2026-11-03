@@ -17,10 +17,10 @@ const place: Record<Side, string> = {
  * Inside the shell it renders in a native overlay so it can sit above the page
  * view (renderer DOM never can); in a plain browser it falls back to CSS.
  */
-export function Tooltip({ label, body, shortcut, side = 'bottom', className = '', children }: {
+export function Tooltip({ label, wrap, shortcut, side = 'bottom', className = '', children }: {
   label: string
-  /** Longer wrapped text under the label (e.g. a workspace's full goal); turns the hint into a small card. */
-  body?: string
+  /** Wrap the label over multiple lines (for longer text, e.g. a workspace's full goal). */
+  wrap?: boolean
   shortcut?: string
   side?: Side
   /** Wrapper layout, e.g. `flex w-full` when wrapping a full-width row. */
@@ -42,7 +42,7 @@ export function Tooltip({ label, body, shortcut, side = 'bottom', className = ''
       const r = ref.current?.getBoundingClientRect()
       if (!r) return
       shown.current = true
-      overlay.showTooltip({ label, body, shortcut, side, anchor: { x: r.x, y: r.y, width: r.width, height: r.height } })
+      overlay.showTooltip({ label, wrap, shortcut, side, anchor: { x: r.x, y: r.y, width: r.width, height: r.height } })
     }
     return (
       <span ref={ref} className={`relative inline-flex ${className}`} onMouseEnter={show} onMouseLeave={hide} onMouseDown={hide}>
@@ -58,21 +58,12 @@ export function Tooltip({ label, body, shortcut, side = 'bottom', className = ''
         role="tooltip"
         className={`pointer-events-none absolute z-50 ${surface} opacity-0
           transition-[opacity,transform] duration-100 ease-out group-hover/tip:opacity-100 ${place[side]}
-          ${body
-            ? 'flex w-max max-w-[240px] flex-col gap-0.5 whitespace-normal rounded-[8px] px-2.5 py-2'
+          ${wrap
+            ? 'flex w-max max-w-[240px] items-center whitespace-normal rounded-[5px] px-2 py-1 text-[11px] font-medium leading-4'
             : 'flex items-center gap-1.5 whitespace-nowrap rounded-[5px] px-2 py-1 text-[11px] font-medium leading-4'}`}
       >
-        {body ? (
-          <>
-            <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-white/45">{label}</span>
-            <span className="text-[12px] font-medium leading-4 text-white">{body}</span>
-          </>
-        ) : (
-          <>
-            {label}
-            {shortcut && <kbd className="font-sans text-white/45">{shortcut}</kbd>}
-          </>
-        )}
+        {label}
+        {shortcut && <kbd className="font-sans text-white/45">{shortcut}</kbd>}
       </span>
     </span>
   )

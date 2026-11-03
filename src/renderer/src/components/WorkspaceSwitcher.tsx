@@ -65,7 +65,7 @@ export function WorkspaceMenu({ open: expanded, ws, onSelect, onCreate, onOpenCh
             />
           )
           return w.goal ? (
-            <Tooltip key={w.id} label="Goal" body={w.goal} side="right" className="flex w-full">
+            <Tooltip key={w.id} label={w.goal} wrap side="right" className="flex w-full">
               {item}
             </Tooltip>
           ) : (
@@ -132,13 +132,13 @@ export function WorkspaceList({ open: expanded, ws, onSelect }: { open: boolean;
         )
         if (!expanded) {
           return (
-            <Tooltip key={w.id} label={w.name} body={w.goal || undefined} side="right">
+            <Tooltip key={w.id} label={w.goal || w.name} wrap={!!w.goal} side="right">
               {button}
             </Tooltip>
           )
         }
         return w.goal ? (
-          <Tooltip key={w.id} label="Goal" body={w.goal} side="right" className="flex w-full">
+          <Tooltip key={w.id} label={w.goal} wrap side="right" className="flex w-full">
             {button}
           </Tooltip>
         ) : (
