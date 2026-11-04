@@ -1,13 +1,13 @@
 import type { ButtonHTMLAttributes } from 'react'
 
 /**
- * The one button look. Default height is 28px (`sm`); `md` is the 32px
- * ceiling, reserved for a dialog's primary action. Radius is always 6px
- * and icons are normalised to 14px, so callers pass only layout classes
- * (e.g. `ml-auto`) via `className` — never their own height/padding.
+ * The one button look, project-wide. There is deliberately no size prop:
+ * every action button is the same thin 28px height with 6px radius and
+ * 14px icons, so paired actions (primary + secondary in a footer or dock)
+ * can never mismatch. Callers pass only layout classes (e.g. `ml-auto`,
+ * `flex-1`) via `className` — never their own height/padding.
  */
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'dark' | 'light' | 'chromeGhost'
-export type ButtonSize = 'sm' | 'md'
 
 const variants: Record<ButtonVariant, string> = {
   /** Strong action on dark surfaces. */
@@ -24,19 +24,13 @@ const variants: Record<ButtonVariant, string> = {
   chromeGhost: 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text focus-visible:ring-chrome-faint'
 }
 
-const sizes: Record<ButtonSize, string> = {
-  sm: 'h-7 px-2.5',
-  md: 'h-8 px-3'
-}
-
-export const buttonClasses = (variant: ButtonVariant = 'secondary', size: ButtonSize = 'sm') =>
-  `no-drag inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[6px] text-xs font-medium transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3.5 [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]}`
+export const buttonClasses = (variant: ButtonVariant = 'secondary') =>
+  `no-drag inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3.5 [&_svg]:shrink-0 ${variants[variant]}`
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant
-  size?: ButtonSize
 }
 
-export function Button({ variant, size, className = '', type = 'button', ...props }: Props) {
-  return <button type={type} className={`${buttonClasses(variant, size)} ${className}`} {...props} />
+export function Button({ variant, className = '', type = 'button', ...props }: Props) {
+  return <button type={type} className={`${buttonClasses(variant)} ${className}`} {...props} />
 }

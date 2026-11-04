@@ -22,7 +22,7 @@ export function usePrefersReducedMotion(): boolean {
   return reduced
 }
 
-export function PixelTotem({ spec, size = 96, progress = 1, pulseKey = 0, ambient = false, label, className }: {
+export function PixelTotem({ spec, size = 96, progress = 1, pulseKey = 0, ambient = false, thinking = false, label, className }: {
   spec: IdentitySpec
   size?: number
   progress?: number
@@ -34,6 +34,8 @@ export function PixelTotem({ spec, size = 96, progress = 1, pulseKey = 0, ambien
    * and never starts under prefers-reduced-motion.
    */
   ambient?: boolean
+  /** Faster, stronger swell while the agent is working (bottom dock). Same loop as `ambient`, livelier period/amplitude. */
+  thinking?: boolean
   label?: string
   className?: string
 }) {
@@ -100,27 +102,34 @@ export function PixelTotem({ spec, size = 96, progress = 1, pulseKey = 0, ambien
   // Ambient breathing: one rAF loop for the component's lifetime, throttled
   // to ~30fps (the grid is 24x24 fillRects, so each frame is cheap).
   useEffect(() => {
-    if (!ambient) return
+    if (!ambient && !thinking) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     let rafId = 0
     let last = 0
     const start = performance.now()
+    const period = thinking ? 2400 : 3600
+    const amplitude = thinking ? 1 : 0.6
+    const baseProgress = shown.current.progress
     const tick = (now: number) => {
       rafId = requestAnimationFrame(tick)
       if (now - last < 33) return
       last = now
-      // 0 → 0.6 → 0 over 3.6s, starting and ending at rest.
-      shown.current.pulse = ((Math.sin(((now - start) / 3600) * Math.PI * 2 - Math.PI / 2) + 1) / 2) * 0.6
+      // 0 → amplitude → 0 over `period`, starting and ending at rest.
+      const phase = (Math.sin(((now - start) / period) * Math.PI * 2 - Math.PI / 2) + 1) / 2
+      shown.current.pulse = phase * amplitude
+      // Thinking also waves the assembly progress, so cells visibly stack
+      // and unstack — the pulse alone is sub-pixel at dock size (34px).
+      if (thinking) shown.current.progress = (0.55 + 0.45 * phase) * baseProgress
       draw()
     }
     rafId = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(rafId)
-      shown.current.pulse = 0
+      shown.current = { progress: baseProgress, pulse: 0 }
       draw()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ambient, spec, size])
+  }, [ambient, thinking, spec, size])
 
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
 

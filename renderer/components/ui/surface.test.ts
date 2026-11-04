@@ -20,6 +20,21 @@ describe('floating surfaces', () => {
     expect(src).not.toContain('bg-[#')
   })
 
+  it('New Chat (Magic) uses the shared charcoal surface and always stacks highest', () => {
+    const magic = read('../../components/browser/MagicPopover.tsx')
+    expect(magic).toContain("from '../ui/surface'")
+    expect(magic).toContain('${surface}')
+    expect(magic).not.toContain('bg-white p-4')
+    const overlay = read('../../overlay/OverlayApp.tsx')
+    expect(overlay).toContain('topmostSurfaceZ')
+    // The competing proposal popup must stay below New Chat.
+    const notice = read('../../components/browser/AgentSwitchNotice.tsx')
+    expect(notice).toContain('z-40')
+    expect(notice).not.toContain('z-50')
+    expect(surface).toBeTruthy()
+    expect(read('./surface.ts')).toContain("topmostSurfaceZ = 'z-[100]'")
+  })
+
   it('the native tooltip overlay mirrors the charcoal surface', () => {
     // neutral-800
     expect(read('../../../main/browser/tooltip-overlay.ts')).toContain('background:#262626')

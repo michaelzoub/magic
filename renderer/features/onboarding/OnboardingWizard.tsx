@@ -83,7 +83,7 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
       <Dialog open={open} onClose={finish} label={title} hideHeader>
         {renderCompletion(flow.collectedData)}
         <footer className="flex items-center justify-center px-4 pb-4">
-          <Button variant="primary" size="md" onClick={finish}>
+          <Button variant="primary" onClick={finish}>
             Enter Magic
           </Button>
         </footer>
@@ -133,7 +133,7 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
             Back
           </Button>
         )}
-        <Button variant="primary" size="md" disabled={saving} onClick={() => void advance()}>
+        <Button variant="primary" disabled={saving} onClick={() => void advance()}>
           {saving ? 'Saving…' : flow.isLast ? 'Save' : 'Continue →'}
         </Button>
       </footer>

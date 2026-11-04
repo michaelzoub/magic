@@ -213,6 +213,80 @@ describe('EmbeddedAgentHost', () => {
     await host.dispose()
   })
 
+  it('assessDrift is one bare inference call (never the Eve runtime) and strips excluded sites', async () => {
+    const send = vi.fn(async () => ({ sessionId: 's1', reply: 'done', status: 'completed' as const }))
+    const complete = vi.fn(
+      async (_prompt: string) =>
+        'DRIFT_VERDICT: {"verdicts":[{"tabId":"t1","verdict":"unrelated","reason":"Entertainment, not work"},{"tabId":"t2","verdict":"related","reason":"Project board"}]}'
+    )
+    const host = new EmbeddedAgentHost({
+      appRoot: '/nonexistent',
+      engine: {} as ElectronEngine,
+      runtime: { id: 'fake', send },
+      eveServer: 'none',
+      log: () => {},
+      assistance: { active: true, excludedSites: [], excludedWorkspaceIds: [] },
+      inference: { id: 'inference:fake', complete }
+    })
+    host.setAssistanceExclusions(['youtube.com'], [])
+    const result = await host.assessDrift({
+      workspace: { id: 'b', name: 'Work', goal: 'Get work projects done' },
+      tabs: [
+        { id: 't1', title: 'Funny cats', url: 'https://youtube.com/watch?v=1' },
+        { id: 't2', title: 'Project board', url: 'https://github.com/acme' }
+      ]
+    })
+    // The excluded YouTube tab is never sent to the model, so it gets no verdict.
+    expect(complete).toHaveBeenCalledOnce()
+    expect(complete.mock.calls[0][0]).not.toContain('youtube.com')
+    expect(complete.mock.calls[0][0]).toContain('github.com')
+    expect(send).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      status: 'completed',
+      runtime: 'inference:fake',
+      verdicts: [{ tabId: 't2', verdict: 'related', reason: 'Project board' }]
+    })
+    await host.dispose()
+  })
+
+  it('assessDrift is skipped (no verdicts, never drift) when assistance is off or inference fails', async () => {
+    const complete = vi.fn(async () => 'DRIFT_VERDICT: {"verdicts":[]}')
+    const host = new EmbeddedAgentHost({
+      appRoot: '/nonexistent',
+      engine: {} as ElectronEngine,
+      runtime: { id: 'fake', send: async () => ({ sessionId: 's1', reply: 'done', status: 'completed' as const }) },
+      eveServer: 'none',
+      log: () => {},
+      assistance: { active: true, excludedSites: [], excludedWorkspaceIds: [] },
+      inference: { id: 'inference:fake', complete }
+    })
+    host.setAssistanceActive(false)
+    await expect(
+      host.assessDrift({ workspace: { id: 'b', name: 'Work', goal: 'Ship' }, tabs: [{ id: 't1', title: 'Cats', url: 'https://youtube.com/' }] })
+    ).resolves.toEqual({ status: 'skipped', verdicts: [], reason: 'Background assistance is off' })
+    expect(complete).not.toHaveBeenCalled()
+    await host.dispose()
+
+    const failing = new EmbeddedAgentHost({
+      appRoot: '/nonexistent',
+      engine: {} as ElectronEngine,
+      runtime: { id: 'fake', send: async () => ({ sessionId: 's1', reply: 'done', status: 'completed' as const }) },
+      eveServer: 'none',
+      log: () => {},
+      assistance: { active: true, excludedSites: [], excludedWorkspaceIds: [] },
+      inference: {
+        id: 'inference:fake',
+        complete: async () => {
+          throw new Error('boom')
+        }
+      }
+    })
+    await expect(
+      failing.assessDrift({ workspace: { id: 'b', name: 'Work', goal: 'Ship' }, tabs: [{ id: 't1', title: 'Cats', url: 'https://youtube.com/' }] })
+    ).resolves.toMatchObject({ status: 'failed', verdicts: [], reason: 'boom' })
+    await failing.dispose()
+  })
+
   it('never rejects when the runtime fails', async () => {
     const host = hostWith({
       id: 'fake',

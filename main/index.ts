@@ -10,8 +10,10 @@ import { TooltipOverlay } from './browser/tooltip-overlay'
 import { FloatingOverlay } from './browser/floating-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
 import { ONBOARDING_IPC, type CompleteOnboardingInput, type UpdateProfileInput } from '@shared/onboarding'
-import { AGENT_IPC, DEFAULT_ASSISTANCE, type AgentChatContext, type AssistanceSettings, type WorkspaceSwitchNotice } from '@shared/agent'
+import { AGENT_IPC, DEFAULT_ASSISTANCE, type AgentChatContext, type AssistanceSettings, type DriftAssessmentRequest, type WorkspaceSwitchNotice } from '@shared/agent'
 import { BackgroundAssistance, EmbeddedAgentHost } from './agent/host'
+import type { WorkspaceDirectory } from '@agent/lib/tools/ports'
+import { ToolError } from '@agent/lib/tools/types'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -65,6 +67,29 @@ const assistance = (): BackgroundAssistance => {
   return assistanceState
 }
 
+/** Listed workspaces as the agent sees them, read from the persisted snapshot. */
+function listAgentWorkspaces() {
+  const snap = workspaces().loadSnapshot()
+  if (!snap) return []
+  const listed = new Set(snap.listedIds)
+  return snap.workspaces
+    .filter((w) => listed.has(w.id))
+    .map((w) => ({ id: w.id, name: w.name, goal: w.goal, active: w.id === snap.activeWorkspaceId }))
+}
+
+/** Agent workspace access for one window: switches go through its shell renderer, like a sidebar click. */
+function workspaceDirectoryFor(win: BrowserWindow): WorkspaceDirectory {
+  return {
+    list: async () => listAgentWorkspaces(),
+    switchTo: async (workspaceId) => {
+      if (!listAgentWorkspaces().some((w) => w.id === workspaceId)) {
+        throw new ToolError('not_found', `No workspace with id ${workspaceId}`)
+      }
+      await requestShellAction(win, { type: 'workspace:select', id: workspaceId })
+    }
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -93,7 +118,24 @@ function createWindow(): void {
   const engine = new ElectronEngine(win)
   const wcId = win.webContents.id
   engines.set(wcId, engine)
-  agentHosts.set(wcId, new EmbeddedAgentHost({ appRoot: app.getAppPath(), engine, log: (m) => console.log(m), assistanceState: assistance() }))
+  agentHosts.set(
+    wcId,
+    new EmbeddedAgentHost({
+      appRoot: app.getAppPath(),
+      engine,
+      log: (m) => console.log(m),
+      assistanceState: assistance(),
+      workspaces: workspaceDirectoryFor(win),
+      // Deterministic pre-close feedback: tell the shell which tab the
+      // agent is about to close and give it a beat to paint the red
+      // removal highlight before the close is enacted.
+      onTabClosing: async (tabId) => {
+        if (win.isDestroyed() || win.webContents.isDestroyed()) return
+        win.webContents.send(AGENT_IPC.tabClosing, tabId)
+        await new Promise((r) => setTimeout(r, 800))
+      }
+    })
+  )
   tooltips.set(wcId, new TooltipOverlay(win))
   const overlay = new FloatingOverlay(win)
   overlays.set(wcId, overlay)
@@ -171,6 +213,19 @@ ipcMain.handle(AGENT_IPC.ask, (e, question: string, context: AgentChatContext, r
     if (requestId && !sender.isDestroyed()) sender.send(AGENT_IPC.askEvent, requestId, event)
   })
 })
+ipcMain.handle(AGENT_IPC.assessDrift, (e, request: DriftAssessmentRequest) => {
+  const host = agentHosts.get(e.sender.id)
+  if (!host) return { status: 'skipped', verdicts: [], reason: 'No agent host for this window' }
+  const safeRequest: DriftAssessmentRequest = {
+    workspace: request?.workspace
+      ? { id: String(request.workspace.id ?? ''), name: String(request.workspace.name ?? ''), goal: String(request.workspace.goal ?? '') }
+      : { id: '', name: '', goal: '' },
+    tabs: Array.isArray(request?.tabs)
+      ? request.tabs.map((t) => ({ id: String(t?.id ?? ''), title: String(t?.title ?? ''), url: String(t?.url ?? '') })).filter((t) => t.id)
+      : []
+  }
+  return host.assessDrift(safeRequest)
+})
 ipcMain.handle(AGENT_IPC.getAssistance, () => assistance().get())
 ipcMain.handle(AGENT_IPC.setAssistanceActive, (_e, active: boolean) => assistance().setActive(Boolean(active)))
 ipcMain.handle(AGENT_IPC.setAssistanceExclusions, (_e, excludedSites: string[], excludedWorkspaceIds: string[]) =>
@@ -218,8 +273,14 @@ ipcMain.handle(OVERLAY_IPC.action, (e, action: OverlayAction) => {
   const entry = [...overlays.entries()].find(([, o]) => o.webContents.id === e.sender.id)
   if (!entry) throw new Error('Overlay action from an unknown overlay')
   const win = BrowserWindow.fromWebContents(e.sender)
-  const shell = win?.webContents
-  if (!win || !shell || shell.isDestroyed()) throw new Error('Shell window is gone')
+  if (!win) throw new Error('Shell window is gone')
+  return requestShellAction(win, action)
+})
+
+/** Ask a window's shell renderer to perform an action and await its result. */
+function requestShellAction(win: BrowserWindow, action: OverlayAction): Promise<unknown> {
+  const shell = win.webContents
+  if (win.isDestroyed() || shell.isDestroyed()) return Promise.reject(new Error('Shell window is gone'))
   const id = `a${++actionSeq}`
   return new Promise((resolve, reject) => {
     // Generous cap: a magic:ask action waits on a full agent turn (up to
@@ -234,7 +295,7 @@ ipcMain.handle(OVERLAY_IPC.action, (e, action: OverlayAction) => {
     })
     shell.send(OVERLAY_IPC.actionRequest, id, action)
   })
-})
+}
 ipcMain.on(OVERLAY_IPC.actionResponse, (_e, id: string, ok: boolean, value?: unknown, error?: string) => {
   const pending = pendingActions.get(id)
   if (!pending) return

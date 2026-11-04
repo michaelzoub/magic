@@ -10,3 +10,12 @@
  */
 export const surface =
   'bg-neutral-800 text-white shadow-[0_4px_16px_rgb(0_0_0/0.35)]'
+
+/**
+ * Stacking order for floating surfaces: ordinary popups/dialogs/notices sit
+ * at `z-50`; the New Chat (Magic) surface is always on top of them — and of
+ * everything else — at `topmostSurfaceZ`, so a proposal/drift notice can
+ * never cover it (see the screenshot that motivated this: the dark proposal
+ * sheet painted over the open New Chat card).
+ */
+export const topmostSurfaceZ = 'z-[100]'

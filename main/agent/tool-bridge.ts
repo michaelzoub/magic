@@ -14,6 +14,7 @@ const BROWSER_METHODS: ReadonlySet<string> = new Set([
   'getSnapshot', 'createTab', 'closeTab', 'activateTab', 'navigate', 'goBack', 'goForward', 'reload', 'stop'
 ])
 const PAGE_METHODS: ReadonlySet<string> = new Set(['getContent', 'query', 'click', 'type'])
+const WORKSPACE_METHODS: ReadonlySet<string> = new Set(['list', 'switchTo'])
 
 export interface ToolBridge {
   url: string
@@ -28,9 +29,14 @@ export async function dispatchBridgeCall(
   method: string,
   args: unknown[]
 ): Promise<unknown> {
-  const allowed = target === 'browser' ? BROWSER_METHODS : target === 'page' ? PAGE_METHODS : null
+  const allowed =
+    target === 'browser' ? BROWSER_METHODS : target === 'page' ? PAGE_METHODS : target === 'workspaces' ? WORKSPACE_METHODS : null
   if (!allowed?.has(method)) throw new ToolError('forbidden', `Tool bridge does not allow ${target}.${method}`)
-  const port = (target === 'browser' ? ctx.browser : ctx.page) as unknown as Record<string, (...a: unknown[]) => unknown>
+  if (target === 'workspaces' && !ctx.workspaces) throw new ToolError('unavailable', 'Workspaces are not available')
+  const port = (target === 'browser' ? ctx.browser : target === 'page' ? ctx.page : ctx.workspaces) as unknown as Record<
+    string,
+    (...a: unknown[]) => unknown
+  >
   return port[method](...args)
 }
 

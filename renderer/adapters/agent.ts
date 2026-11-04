@@ -26,6 +26,9 @@ const fallback: EmbeddedAgent = {
   async ask() {
     return { status: 'skipped', reply: null, reason: 'Agent is only available in the Electron shell' }
   },
+  async assessDrift() {
+    return { status: 'skipped', verdicts: [], reason: 'Agent is only available in the Electron shell' }
+  },
   async getAssistance() {
     return { ...fallbackAssistance, excludedSites: [...fallbackAssistance.excludedSites], excludedWorkspaceIds: [...fallbackAssistance.excludedWorkspaceIds] }
   },
@@ -39,6 +42,9 @@ const fallback: EmbeddedAgent = {
   },
   async listAssistanceActivity() {
     return []
+  },
+  onTabClosing() {
+    return () => {}
   }
 }
 
@@ -49,11 +55,15 @@ export const embeddedAgent: EmbeddedAgent = {
     const fn = bridge().workspaceSwitched
     return typeof fn === 'function' ? fn(notice, onEvent) : fallback.workspaceSwitched(notice)
   },
-  ask: (question, context) => {
+  ask: (question, context, onEvent) => {
     const fn = bridge().ask
     return typeof fn === 'function'
-      ? fn(question, context)
+      ? fn(question, context, onEvent)
       : Promise.resolve({ status: 'skipped' as const, reply: null, reason: 'Agent bridge is unavailable — restart Magic to reconnect it' })
+  },
+  assessDrift: (request) => {
+    const fn = bridge().assessDrift
+    return typeof fn === 'function' ? fn(request) : fallback.assessDrift(request)
   },
   getAssistance: () => {
     const fn = bridge().getAssistance
@@ -70,5 +80,9 @@ export const embeddedAgent: EmbeddedAgent = {
   listAssistanceActivity: (limit) => {
     const fn = bridge().listAssistanceActivity
     return typeof fn === 'function' ? fn(limit) : fallback.listAssistanceActivity(limit)
+  },
+  onTabClosing: (listener) => {
+    const fn = bridge().onTabClosing
+    return typeof fn === 'function' ? fn(listener) : fallback.onTabClosing(listener)
   }
 }

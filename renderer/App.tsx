@@ -20,16 +20,17 @@ import { embeddedAgent } from '@/adapters/agent'
 import { canAssistanceRestructure, DEFAULT_ASSISTANCE, type AgentStreamEvent, type AgentSwitchNoticeState, type AgentTabProposal, type AgentWorkspaceInfo, type AssistanceSettings } from '@shared/agent'
 import { AgentSwitchNotice } from '@/components/browser/AgentSwitchNotice'
 import { WorkspaceDriftNotice } from '@/components/browser/WorkspaceDriftNotice'
-import { assessTabAgainstGoal, GoalDriftTracker } from '@core/workspaces/goalDrift'
+import { visibleNotification } from '@core/notifications/ordering'
+import { GoalDriftTracker, isAgentJudgeableTab } from '@core/workspaces/goalDrift'
 import type { WorkspaceDriftNoticeState } from '@shared/overlay'
 import { describeAgentEvent } from '@/components/browser/agentNotice'
+import { feedbackForAgentEvent } from '@/components/browser/agentFeedback'
 
 export function App() {
   const { tabs, activeTabId, activeTab, engine } = useBrowser()
   const id = activeTab?.id
-  // The side panel toggles between its two fixed widths (expanded / rail,
-  // see Sidebar) — never hidden, never drag-resized through widths that
-  // clip its rows.
+  // The side panel toggles between expanded (drag-resizable, see
+  // Sidebar) and the fixed rail — never hidden.
   const [sidebarOpen, setSidebarOpen] = useState(true)
   // The tab strip clears the macOS traffic lights by an inset that depends
   // on the panel's *current* width. The Sidebar GSAP-tweens that width and
@@ -86,9 +87,73 @@ export function App() {
    * re-shows its live tabs instead of reloading the plan's URLs. `reset`
    * forces exactly the plan's tabs (Memory restores, launch).
    */
-  const applySwitch = async (workspaceId: string, plan: WorkspaceSwitchPlan, reset = false) => {
+  // Visual feedback for the switch being enacted: the target row first
+  // carries the preparing state, then — only once the engine confirms the
+  // switch — a brief activated glow. No separate transition indicator.
+  const [workspaceFeedback, setWorkspaceFeedback] = useState<{ id: string; phase: 'preparing' | 'activated' } | null>(null)
+  const workspaceFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (workspaceFeedbackTimer.current) clearTimeout(workspaceFeedbackTimer.current) }, [])
+
+  // Held long enough to be seen after an agent turn finishes (the switch
+  // itself lands early in the turn, long before the reply is read).
+  const WORKSPACE_ACTIVATED_HOLD_MS = 3000
+  const showWorkspaceActivated = (workspaceId: string) => {
+    if (workspaceFeedbackTimer.current) clearTimeout(workspaceFeedbackTimer.current)
+    setWorkspaceFeedback({ id: workspaceId, phase: 'activated' })
+    workspaceFeedbackTimer.current = setTimeout(
+      () => setWorkspaceFeedback((f) => (f?.id === workspaceId && f.phase === 'activated' ? null : f)),
+      WORKSPACE_ACTIVATED_HOLD_MS
+    )
+  }
+
+  // A tab the agent is operating on right now (from live tool-call events),
+  // forwarded to the TabStrip so it can be highlighted while the tool runs —
+  // not just in the instant the resulting snapshot lands.
+  const [tabAttention, setTabAttention] = useState<{ tabId: string; kind: 'reused' | 'removed'; seq: number } | null>(null)
+  const tabAttentionSeq = useRef(0)
+
+  /**
+   * Translate live agent tool events into workspace/tab attention. Only
+   * real tool calls land here; a failed tool result clears the workspace
+   * preparing state instead of showing a success highlight.
+   */
+  // Deterministic pre-close notice from the main process: an agent tool
+  // call is about to close this tab and is waiting for us to paint first.
+  useEffect(() => {
+    return embeddedAgent.onTabClosing((tabId) => {
+      console.info('[feedback] tab closing', tabId)
+      setTabAttention({ tabId, kind: 'removed', seq: ++tabAttentionSeq.current })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const observeAgentEvent = (event: AgentStreamEvent) => {
+    const feedback = feedbackForAgentEvent(event, activeTabId)
+    if (!feedback) return
+    if (feedback.kind === 'workspace-preparing') {
+      if (workspaceFeedbackTimer.current) clearTimeout(workspaceFeedbackTimer.current)
+      setWorkspaceFeedback({ id: feedback.workspaceId, phase: 'preparing' })
+    } else if (feedback.kind === 'workspace-failed') {
+      setWorkspaceFeedback((f) => (f?.phase === 'preparing' ? null : f))
+    } else {
+      setTabAttention({ tabId: feedback.tabId, kind: feedback.tabKind, seq: ++tabAttentionSeq.current })
+    }
+  }
+
+  const applySwitch = async (workspaceId: string, plan: WorkspaceSwitchPlan, reset = false, feedback = true) => {
     const active = plan.tabs.findIndex((t) => t.id === plan.activeTabId)
-    await engine.switchWorkspace(workspaceId, plan.tabs, Math.max(active, 0), reset)
+    if (feedback && workspaceId) {
+      if (workspaceFeedbackTimer.current) clearTimeout(workspaceFeedbackTimer.current)
+      setWorkspaceFeedback({ id: workspaceId, phase: 'preparing' })
+    }
+    try {
+      await engine.switchWorkspace(workspaceId, plan.tabs, Math.max(active, 0), reset)
+    } catch (e) {
+      // Failed switch: drop the preparing state, show no activated glow.
+      if (feedback) setWorkspaceFeedback((f) => (f?.id === workspaceId ? null : f))
+      throw e
+    }
+    if (feedback && workspaceId) showWorkspaceActivated(workspaceId)
   }
 
   /** Live tabs as a workspace tab set, for saving under the outgoing workspace. */
@@ -165,7 +230,15 @@ export function App() {
     for (const p of proposals) {
       try {
         if (p.kind === 'open') await engine.createTab(p.url || undefined)
-        else if (p.kind === 'close') { if (liveIds.has(p.tabId)) await engine.closeTab(p.tabId) }
+        else if (p.kind === 'close') {
+          if (!liveIds.has(p.tabId)) continue
+          // About to be removed: paint the tab red (light wash + blueprint
+          // grid, via the TabStrip) and hold briefly before closing, so the
+          // removal is seen before it happens — one tab at a time.
+          setTabAttention({ tabId: p.tabId, kind: 'removed', seq: ++tabAttentionSeq.current })
+          await new Promise((r) => setTimeout(r, 650))
+          await engine.closeTab(p.tabId)
+        }
         else if (liveIds.has(p.tabId)) await engine.navigate(p.tabId, p.url)
       } catch {
         // One stale proposal (tab already gone) must not stop the rest.
@@ -191,6 +264,7 @@ export function App() {
       fromName: from?.name ?? null,
       toName: to.name,
       phase: 'running',
+      identitySeed: profile?.identitySeed ?? null,
       traces: [],
       reply: null,
       proposals: []
@@ -208,7 +282,7 @@ export function App() {
           if (!trace) return
           setAgentNotice((n) =>
             n && n.id === String(runId) && n.phase === 'running' && n.traces[n.traces.length - 1] !== trace
-              ? { ...n, traces: [...n.traces, trace].slice(-5) }
+              ? { ...n, traces: [...n.traces, trace].slice(-30) }
               : n
           )
         }
@@ -282,17 +356,31 @@ export function App() {
     return plan ? nextId : ws.activeId
   }
 
-  // Goal drift: while a workspace is active, judge each new tab navigation
-  // against its goal (see @core/workspaces/goalDrift). Two consecutive
-  // unrelated navigations quit the workspace — it becomes non-set, its tabs
-  // stay open outside it — and the small bottom-right notice explains why.
+  // Goal drift: while a workspace is active, one bare inference call (no
+  // agent loop, no thinking; see @agent/lib/drift) judges each new tab
+  // navigation against its goal — no local heuristic
+  // decides related/unrelated. A single model-judged unrelated navigation
+  // shows the small bottom-center warning (the prompt only allows
+  // `unrelated` when confident, so no streak is needed to filter noise);
+  // the workspace stays active. The streak then restarts so the warning
+  // doesn't repeat on every further tab. A skipped/failed/unjudged run yields no
+  // verdicts, which counts as `unknown` and can never trigger the warning.
   // Tabs already open when a workspace becomes active are primed (never
   // judged), plus a short grace period covers the switch's tab restore, so
-  // only browsing the user actually does here can trigger an exit.
+  // only browsing the user actually does here can trigger a warning.
   const [driftNotice, setDriftNotice] = useState<WorkspaceDriftNoticeState | null>(null)
-  const driftTracker = useRef(new GoalDriftTracker(2))
+  const driftTracker = useRef(new GoalDriftTracker(1))
   const driftSession = useRef<{ workspaceId: string; since: number } | null>(null)
+  /** Tab+URL keys with an agent judgment currently in flight. */
+  const driftInFlight = useRef(new Set<string>())
   const dismissDriftNotice = () => setDriftNotice(null)
+  const quitDriftedWorkspace = () => {
+    setDriftNotice(null)
+    driftTracker.current.reset()
+    driftSession.current = null
+    ws.quit(currentTabSet())
+    setStartupRecovery('ineligible')
+  }
   useEffect(() => {
     const active = ws.all.find((w) => w.id === ws.activeId) ?? null
     if (!active) {
@@ -308,16 +396,36 @@ export function App() {
       for (const t of tabs) driftTracker.current.prime(t.id, t.url)
       return
     }
-    for (const t of tabs) {
-      const { verdict } = assessTabAgainstGoal(active, t)
-      if (!driftTracker.current.observe(t.id, t.url, verdict).shouldExit) continue
-      driftTracker.current.reset()
-      driftSession.current = null
-      ws.quit(currentTabSet())
-      setStartupRecovery('ineligible')
-      setDriftNotice({ workspaceName: active.name })
-      break
-    }
+    const candidates = tabs.filter(
+      (t) => isAgentJudgeableTab(t.url) && !driftTracker.current.isJudged(t.id, t.url) && !driftInFlight.current.has(`${t.id}|${t.url}`)
+    )
+    if (candidates.length === 0) return
+    for (const t of candidates) driftInFlight.current.add(`${t.id}|${t.url}`)
+    const workspaceId = active.id
+    void embeddedAgent
+      .assessDrift({
+        workspace: { id: active.id, name: active.name, goal: active.goal },
+        tabs: candidates.map((t) => ({ id: t.id, title: t.title ?? '', url: t.url }))
+      })
+      .then((result) => {
+        console.info('[drift]', result.status, result.reason ?? '', result.verdicts)
+        // The user moved on while the model was judging: drop the verdicts.
+        if (driftSession.current?.workspaceId !== workspaceId) return
+        const byId = new Map(result.verdicts.map((v) => [v.tabId, v.verdict]))
+        for (const t of candidates) {
+          // No verdict for this tab (skipped/failed/unjudged) = unknown.
+          if (!driftTracker.current.observe(t.id, t.url, byId.get(t.id) ?? 'unknown').shouldExit) continue
+          driftTracker.current.resetStreak()
+          setDriftNotice({ workspaceName: active.name })
+          break
+        }
+      })
+      .catch(() => {
+        // assessDrift never rejects by contract; a broken bridge must not warn.
+      })
+      .finally(() => {
+        for (const t of candidates) driftInFlight.current.delete(`${t.id}|${t.url}`)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs, ws.activeId, ws.all])
 
@@ -326,6 +434,10 @@ export function App() {
   useEffect(() => {
     nativeOverlay?.showDriftNotice(driftNotice)
   }, [nativeOverlay, driftNotice])
+
+  // Which notification is on screen (shell fallback rendering below; the
+  // overlay applies the same ordering to the states mirrored into it).
+  const visibleNoticeKind = visibleNotification({ agent: agentNotice, drift: driftNotice })
 
   // Startup recovery gate for the recent-switch prompt: evaluated exactly
   // once, when workspaces have rehydrated at fresh app open. Eligible only
@@ -360,7 +472,7 @@ export function App() {
     restoredTabs.current = true
     const saved = ws.getTabSet(ws.activeId)
     if (ws.activeId && saved.tabs.length > 0) {
-      void applySwitch(ws.activeId, { closeTabIds: tabs.map((t) => t.id), tabs: saved.tabs, activeTabId: saved.activeTabId }, true)
+      void applySwitch(ws.activeId, { closeTabIds: tabs.map((t) => t.id), tabs: saved.tabs, activeTabId: saved.activeTabId }, true, false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws.ready])
@@ -434,7 +546,10 @@ export function App() {
         workspace: active ? { id: active.id, name: active.name, goal: active.goal } : null,
         tabs: tabs.map((t) => ({ title: t.title ?? '', url: t.url }))
       },
-      onEvent
+      (event) => {
+        observeAgentEvent(event)
+        onEvent?.(event)
+      }
     )
     if (result.checkpointVerdict) {
       memory.setMeaningful(checkpointId, result.checkpointVerdict.meaningful, result.checkpointVerdict.reason)
@@ -457,8 +572,8 @@ export function App() {
     await applyAgentProposals(proposals)
   }
   const dismissAgentNotice = () => setAgentNotice(null)
-  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) })
-  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) }
+  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, quitDriftedWorkspace, reloadActive: () => id && engine.reload(id) })
+  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, quitDriftedWorkspace, reloadActive: () => id && engine.reload(id) }
 
   useEffect(() => {
     if (!nativeOverlay) return
@@ -513,6 +628,9 @@ export function App() {
         case 'drift:dismiss-notice':
           h.dismissDriftNotice()
           return null
+        case 'drift:quit-workspace':
+          h.quitDriftedWorkspace()
+          return null
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -562,8 +680,9 @@ export function App() {
         onMemory={() => setMemoryOpen(true)}
         memoryCount={memory.visibleCheckpoints.length}
         onSettings={() => setProfileOpen(true)}
-        profile={profile ? { displayName: profile.displayName, identity: identitySpec } : null}
+        profile={profile ? { displayName: profile.displayName, identity: identitySpec, identitySeed: profile.identitySeed } : null}
         ws={ws}
+        workspaceFeedback={workspaceFeedback}
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createWorkspace}
         onDeleteWorkspace={deleteWorkspace}
@@ -596,6 +715,10 @@ export function App() {
           <TabStrip
             tabs={tabs}
             activeTabId={activeTabId}
+            attention={tabAttention}
+            markedForRemoval={
+              agentNotice?.phase === 'done' ? agentNotice.proposals.filter((p) => p.kind === 'close').map((p) => p.tabId) : undefined
+            }
             onSelect={(t) => engine.activateTab(t)}
             onClose={(t) => engine.closeTab(t)}
             onNew={() => engine.createTab()}
@@ -655,11 +778,13 @@ export function App() {
           onViewAll={() => setMemoryOpen(true)}
         />
       </main>
-      {!nativeOverlay && agentNotice && (
+      {/* Notification ordering (see @core/notifications/ordering): one
+          visible at a time by priority; the other queues behind it. */}
+      {!nativeOverlay && visibleNoticeKind === 'agent' && agentNotice && (
         <AgentSwitchNotice notice={agentNotice} onApply={(proposals) => void applyNoticeProposals(proposals)} onDismiss={dismissAgentNotice} />
       )}
-      {!nativeOverlay && driftNotice && (
-        <WorkspaceDriftNotice workspaceName={driftNotice.workspaceName} onDismiss={dismissDriftNotice} />
+      {!nativeOverlay && visibleNoticeKind === 'drift' && driftNotice && (
+        <WorkspaceDriftNotice workspaceName={driftNotice.workspaceName} onDismiss={dismissDriftNotice} onQuit={quitDriftedWorkspace} />
       )}
       {!nativeOverlay && (
         <>

@@ -1,40 +1,58 @@
 import { useEffect } from 'react'
-import { Close } from '../ui/icons'
+import { Close, WarningTriangle } from '../ui/icons'
 import { surface } from '../ui/surface'
 
 /**
- * Very small, non-obtrusive heads-up shown bottom-right when Magic quits
- * the active workspace because the user drifted off its goal: same dark
- * popup surface as the other floating UI, one line, auto-dismisses.
- * The workspace exit itself has already happened — this only explains it;
- * the tabs stay open, now outside any workspace.
+ * Toast shown when the model judges the user's tabs unrelated to the
+ * active workspace's goal. Like every notification (see the agent switch
+ * notice), it docks bottom-center — never in a corner — and notification
+ * ordering decides which one occupies the dock at a time. Dark charcoal
+ * surface, a coloured warning icon, a bold title over a muted description,
+ * and one white pill action. It only warns and recommends quitting; the
+ * workspace stays active unless the user clicks Quit. Auto-dismisses.
  */
-export function WorkspaceDriftNotice({ workspaceName, onDismiss }: {
+export function WorkspaceDriftNotice({ workspaceName, onDismiss, onQuit }: {
   workspaceName: string
   onDismiss(): void
+  onQuit(): void
 }) {
   useEffect(() => {
-    const t = setTimeout(onDismiss, 6000)
+    const t = setTimeout(onDismiss, 10000)
     return () => clearTimeout(t)
   }, [onDismiss])
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`no-drag fixed bottom-3 right-3 z-50 flex max-w-[280px] items-center gap-1.5 rounded-[8px] py-1.5 pl-2.5 pr-1.5 text-2xs leading-tight ${surface}`}
-    >
-      <span className="min-w-0">
-        Left <span className="font-medium">“{workspaceName}”</span> — those tabs look unrelated to its goal.
+    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3">
+      <div
+        role="status"
+        aria-live="polite"
+        className={`no-drag pointer-events-auto flex w-[340px] max-w-[calc(100vw-24px)] items-center gap-3 rounded-2xl px-3.5 py-3 ring-1 ring-white/10 ${surface}`}
+      >
+      <WarningTriangle className="h-6 w-6 shrink-0 text-amber-400 drop-shadow-[0_2px_6px_rgb(245_158_11/0.45)]" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold leading-tight text-white">
+          Off track from “{workspaceName}”?
+        </span>
+        <span className="mt-0.5 block text-xs leading-snug text-white/55">
+          Those tabs look unrelated to this workspace’s goal.
+        </span>
       </span>
+      <button
+        type="button"
+        onClick={onQuit}
+        className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-neutral-900 transition-colors hover:bg-white/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+      >
+        Quit
+      </button>
       <button
         type="button"
         aria-label="Dismiss"
         onClick={onDismiss}
         className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
       >
-        <Close className="h-3 w-3" />
-      </button>
+          <Close className="h-3 w-3" />
+        </button>
+      </div>
     </div>
   )
 }

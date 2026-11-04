@@ -3,10 +3,11 @@ import type { ReactNode } from 'react'
 import { surface } from './surface'
 import { motion } from '@/motion'
 
-type Placement = 'bottom-start' | 'right-start' | 'right-end'
+type Placement = 'bottom-start' | 'bottom-end' | 'right-start' | 'right-end'
 
 const place: Record<Placement, string> = {
   'bottom-start': 'left-0 right-0 top-full mt-1 origin-top',
+  'bottom-end': 'right-0 top-full mt-1 w-[200px] origin-top-right',
   'right-start': 'left-full top-0 ml-2 w-[200px] origin-top-left',
   'right-end': 'bottom-0 left-full ml-2 w-[440px] origin-bottom-left',
 }

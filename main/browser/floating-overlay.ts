@@ -48,6 +48,10 @@ export class FloatingOverlay {
   /** Show/update the agent switch notice; independent of any open surface. */
   showAgentNotice(notice: AgentSwitchNoticeState | null): void {
     this.notice = notice
+    // Re-layout on clear too: a queued drift notice (see notification
+    // ordering in the overlay renderer) becomes visible next and needs
+    // its own (smaller) bottom-center dock bounds.
+    if (!notice && this.drift) this.layout()
     if (notice) {
       this.layout()
       if (!this.window.isDestroyed() && !this.window.contentView.children.includes(this.view)) {
@@ -135,10 +139,12 @@ export class FloatingOverlay {
       const h = Math.min(520, height)
       this.view.setBounds({ x: Math.max(0, Math.round((width - w) / 2)), y: Math.max(0, height - h), width: w, height: h })
     } else if (this.drift) {
-      // Drift-only: confine the layer to the bottom-right corner.
-      const w = Math.min(304, width)
-      const h = Math.min(96, height)
-      this.view.setBounds({ x: Math.max(0, width - w), y: Math.max(0, height - h), width: w, height: h })
+      // Drift-only: same bottom-center dock as the agent notice, sized
+      // for the 340px toast + its 12px inset so the rest of the window
+      // stays clickable through the layer.
+      const w = Math.min(364, width)
+      const h = Math.min(120, height)
+      this.view.setBounds({ x: Math.max(0, Math.round((width - w) / 2)), y: Math.max(0, height - h), width: w, height: h })
     } else {
       this.view.setBounds({ x: 0, y: 0, width, height })
     }

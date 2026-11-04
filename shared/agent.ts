@@ -116,11 +116,39 @@ export interface AgentSwitchNoticeState {
   fromName: string | null
   toName: string
   phase: 'running' | 'done' | 'failed' | 'skipped'
+  /** User's totem seed, so the running pill can animate their identity in both renderers. */
+  identitySeed?: string | null
   /** Important trace lines only (tool activity + failures), newest last. */
   traces: string[]
   reply: string | null
   reason?: string
   proposals: AgentTabProposal[]
+}
+
+/** The agent's judgment of one tab against the active workspace's goal. */
+export type GoalDriftVerdict = 'related' | 'unrelated' | 'unknown'
+
+export interface DriftTabVerdict {
+  tabId: string
+  verdict: GoalDriftVerdict
+  /** Short reason for the verdict, shown for debugging/log output. */
+  reason: string | null
+}
+
+/** Tabs the shell asks the model to judge for workspace goal drift (one bare inference call). */
+export interface DriftAssessmentRequest {
+  workspace: AgentWorkspaceInfo
+  tabs: (AgentTabInfo & { id: string })[]
+}
+
+export interface DriftAssessmentResult {
+  status: AgentRunStatus
+  /** One verdict per judged tab; empty when no run happened / nothing was judged. */
+  verdicts: DriftTabVerdict[]
+  /** Runtime that produced the verdicts (e.g. `eve`), when a run happened. */
+  runtime?: string
+  /** Why no run happened, when `status` is `skipped`. */
+  reason?: string
 }
 
 export interface EmbeddedAgent {
@@ -138,6 +166,14 @@ export interface EmbeddedAgent {
    * continue one conversation session per window. Never rejects.
    */
   ask(question: string, context: AgentChatContext, onEvent?: AgentStreamListener): Promise<AgentRunResult>
+  /**
+   * Ask the model — not a local heuristic, and not an agent run: one bare
+   * inference call — whether each given tab is
+   * related to the active workspace's goal. Fails soft: a skipped/failed
+   * run returns no verdicts, which the shell treats as `unknown` (never
+   * as drift). Never rejects.
+   */
+  assessDrift(request: DriftAssessmentRequest): Promise<DriftAssessmentResult>
   /** Current global background-assistance state. */
   getAssistance(): Promise<AssistanceSettings>
   /** Turn background assistance on/off globally; resolves with the stored state. */
@@ -146,6 +182,13 @@ export interface EmbeddedAgent {
   setAssistanceExclusions(excludedSites: string[], excludedWorkspaceIds: string[]): Promise<AssistanceSettings>
   /** Recent background-assistance activity, most recent first. */
   listAssistanceActivity(limit?: number): Promise<AssistanceActivity[]>
+  /**
+   * Subscribe to "a tab is about to be closed by an agent tool call"
+   * notices. Fired (and briefly awaited) before the close is enacted, so
+   * the shell can paint the tab's removal highlight first. Returns an
+   * unsubscribe function.
+   */
+  onTabClosing(listener: (tabId: string) => void): () => void
 }
 
 export const AGENT_IPC = {
@@ -153,8 +196,11 @@ export const AGENT_IPC = {
   /** main -> renderer: one AgentStreamEvent for a switch run, tagged with its request id. */
   workspaceSwitchedEvent: 'agent:workspace-switched:event',
   ask: 'agent:ask',
+  assessDrift: 'agent:assess-drift',
   /** main -> asking renderer: one AgentStreamEvent, tagged with the ask's request id. */
   askEvent: 'agent:ask:event',
+  /** main -> renderer: an agent tool call is about to close this tab (paint the removal highlight now). */
+  tabClosing: 'agent:tab-closing',
   getAssistance: 'agent:assistance:get',
   setAssistanceActive: 'agent:assistance:set-active',
   setAssistanceExclusions: 'agent:assistance:set-exclusions',

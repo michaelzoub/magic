@@ -33,8 +33,8 @@ export function agentModelProvider(): AgentModelProvider {
  * A missing `MODEL_API_KEY` does not throw here; the provider call fails at
  * request time with its own auth error, so `eve info` still works keyless.
  */
-export function resolveAgentModel(): EveLanguageModel | string {
-  if (agentModelProvider() === 'gateway') return AGENT_MODEL.id
+function resolveModel(modelId: string): EveLanguageModel | string {
+  if (agentModelProvider() === 'gateway') return modelId
 
   const meta = createOpenAICompatible({
     name: 'meta',
@@ -42,5 +42,18 @@ export function resolveAgentModel(): EveLanguageModel | string {
     apiKey: process.env.MODEL_API_KEY,
     includeUsage: true
   })
-  return meta(AGENT_MODEL.id)
+  return meta(modelId)
+}
+
+export function resolveAgentModel(): EveLanguageModel | string {
+  return resolveModel(AGENT_MODEL.id)
+}
+
+/**
+ * Model for bare inference calls (no agent loop): the agent model by
+ * default, overridable with `DRIFT_MODEL_ID` to point drift judgment at a
+ * smaller/faster model without touching the agent's model.
+ */
+export function resolveInferenceModel(): EveLanguageModel | string {
+  return resolveModel(process.env.DRIFT_MODEL_ID ?? AGENT_MODEL.id)
 }

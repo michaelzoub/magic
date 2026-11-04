@@ -15,7 +15,7 @@ export interface TooltipRequest {
   anchor: Bounds
 }
 
-/** Small bottom-right notice shown when goal drift quits the active workspace. */
+/** Small bottom-center dock notice shown when the model's drift judgment fires. */
 export interface WorkspaceDriftNoticeState {
   workspaceName: string
 }
@@ -84,6 +84,8 @@ export interface MagicContext {
   workspaces: { id: string; name: string }[]
   /** Recent workspace activity, most recent first. */
   activity: MagicActivity[]
+  /** User's totem seed, so the chat thinking state can animate their identity like the bottom dock does. */
+  identitySeed?: string | null
 }
 
 export type SurfaceKind = SurfaceRequest['kind']
@@ -116,6 +118,8 @@ export type OverlayAction =
   | { type: 'agent:dismiss-notice' }
   /** Dismiss the workspace drift notice. */
   | { type: 'drift:dismiss-notice' }
+  /** Quit the active workspace from the drift notice (tabs stay open, outside any workspace). */
+  | { type: 'drift:quit-workspace' }
 
 /**
  * Floating shell UI that must paint above the native page view. Renderer DOM
@@ -135,7 +139,7 @@ export interface ShellOverlay {
   pushMagicAgentEvent(streamId: string, event: AgentStreamEvent): void
   /** Show/update (or clear, with null) the bottom-center agent switch notice above the page. */
   showAgentNotice(notice: AgentSwitchNoticeState | null): void
-  /** Show (or clear, with null) the small bottom-right drift notice above the page. */
+  /** Show (or clear, with null) the small bottom-center drift notice above the page. */
   showDriftNotice(notice: WorkspaceDriftNoticeState | null): void
 }
 
@@ -177,13 +181,21 @@ export const OVERLAY_IPC = {
   driftNotice: 'overlay:drift-notice'
 } as const
 
+/**
+ * Width of the workspace dropdown. Deliberately wider than the sidebar /
+ * collapsed rail it anchors to: rows show each workspace's goal under its
+ * name, and the inline create form needs room for its goal field — at the
+ * old 180–232px the goal was truncated to a few characters.
+ */
+export const WORKSPACE_MENU_WIDTH = 320
+
 /** Top-left of a workspace dropdown panel for `anchor`, clamped into the window. */
 export function menuPosition(
   req: Extract<SurfaceRequest, { kind: 'workspace-menu' }>,
   size: { width: number; height: number },
   window: { width: number; height: number }
 ): { x: number; y: number; width: number } {
-  const width = req.placement === 'right-start' ? 200 : Math.max(180, req.anchor.width)
+  const width = Math.min(WORKSPACE_MENU_WIDTH, Math.max(180, window.width - 8))
   const raw =
     req.placement === 'right-start'
       ? { x: req.anchor.x + req.anchor.width + 8, y: req.anchor.y }
@@ -196,6 +208,9 @@ export function menuPosition(
 }
 
 export const MAGIC_POPOVER_WIDTH = 440
+
+/** Fixed chat height: typing, tab matches, and streaming must never resize the popover. */
+export const MAGIC_POPOVER_HEIGHT = 520
 
 /**
  * Top-left of the compact magic popover for `anchor`: beside the icon,

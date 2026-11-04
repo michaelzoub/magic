@@ -32,9 +32,30 @@ export interface PageDriver {
   type(tabId: TabId, selector: string, index: number, text: string, opts: { clear: boolean; submit: boolean }): Promise<void>
 }
 
+/** A workspace as tools see it. */
+export interface WorkspaceSummary {
+  id: string
+  name: string
+  /** What the user wants to get done in this workspace. */
+  goal: string
+  active: boolean
+}
+
+/**
+ * Async workspace access for contexts without a local `BrowserStore` (the
+ * Electron host, where the store lives in the renderer).
+ */
+export interface WorkspaceDirectory {
+  list(): Promise<WorkspaceSummary[]>
+  /** Makes `workspaceId` active. Rejects with `not_found` for an unknown id. */
+  switchTo(workspaceId: string): Promise<void>
+}
+
 /** Everything a tool may touch. The store is optional; without it, ownership is not enforced. */
 export interface ToolContext {
   browser: BrowserEngine
   page: PageDriver
   store?: BrowserStore
+  /** Used by workspace tools when no `store` is wired. */
+  workspaces?: WorkspaceDirectory
 }
