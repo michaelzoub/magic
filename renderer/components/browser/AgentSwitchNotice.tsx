@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSwitchNoticeState, AgentTabProposal } from '@shared/agent'
+import { createIdentitySpec } from '@core/identity'
+import { PixelTotem } from '@/features/identity/PixelTotem'
 import { describeProposalDetail, groupProposals } from './agentNotice'
 import { ArrowUpRight, Check, ChevronDown, Close, Globe, Plus, Trash } from '../ui/icons'
 import { surface } from '../ui/surface'
@@ -65,14 +67,80 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
   }
 
   const groups = groupProposals(notice.proposals)
+  const identity = useMemo(() => {
+    if (!notice.identitySeed) return null
+    try {
+      return createIdentitySpec(notice.identitySeed)
+    } catch {
+      return null
+    }
+  }, [notice.identitySeed])
+  const latestTrace = notice.traces[notice.traces.length - 1]
+  const traceListRef = useRef<HTMLUListElement>(null)
+
+  // Keep the newest status in view as traces arrive; older ones stay
+  // reachable by scrolling up in the list.
+  useEffect(() => {
+    const el = traceListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [notice.traces])
+
+  // In the loop: a compact dock in the shared charcoal `surface` (same
+  // black as the concluded sheet below) — the user's totem animated via
+  // PixelTotem's `thinking` cycle, a palette glow bleeding out below it,
+  // and the full status history as a scrollable list, newest last. The
+  // proposal sheet below only returns once the run concludes.
+  if (running) {
+    const glow = identity ? identity.palette.colors.slice(1) : ['#6366f1', '#ec4899', '#f59e0b']
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3">
+        <div ref={panelRef} role="status" aria-live="polite" aria-label={latestTrace ? `Thinking: ${latestTrace}` : 'Thinking'} className="no-drag pointer-events-auto relative w-[448px] max-w-[calc(100vw-24px)]">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-3 -bottom-2 h-7 rounded-lg opacity-60 blur-xl animate-pulse"
+            style={{ background: `linear-gradient(90deg, ${glow.join(', ')})` }}
+          />
+          <div className={`relative rounded-lg p-3 ring-1 ring-white/10 ${surface}`}>
+            <div className="flex items-center gap-2.5">
+              {identity ? (
+                <PixelTotem spec={identity} size={34} thinking label="Your totem, thinking" className="shrink-0 rounded-[6px]" />
+              ) : (
+                <span aria-hidden="true" className="ml-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-white/80" />
+              )}
+              <span className="min-w-0 flex-1 truncate text-base font-medium leading-tight">Thinking</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => leave(onDismiss)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-[6px] text-white/50 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+              >
+                <Close className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <ul ref={traceListRef} aria-label="Agent status" className="mt-2 flex max-h-[7.5rem] flex-col gap-1 overflow-y-auto pr-1">
+              {notice.traces.length > 0 ? (
+                notice.traces.map((trace, i, all) => (
+                  <li key={`${i}-${trace}`} className={`truncate text-xs leading-tight ${i === all.length - 1 ? 'text-white/85' : 'text-white/40'}`}>
+                    {trace}
+                  </li>
+                ))
+              ) : (
+                <li className="truncate text-xs leading-tight text-white/40">{`Preparing ${notice.toName}`}</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-50 flex justify-center px-3">
+    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3">
       <div
         ref={panelRef}
         role="status"
         aria-live="polite"
-        className={`no-drag pointer-events-auto max-h-[calc(100vh-24px)] w-[448px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-lg p-3 ${surface}`}
+        className={`no-drag pointer-events-auto max-h-[calc(100vh-24px)] w-[448px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-lg p-3 ring-1 ring-white/10 ${surface}`}
       >
         <div className="flex items-center gap-2">
           {running && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-white/70" />}
@@ -83,7 +151,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
             type="button"
             aria-label="Dismiss"
             onClick={() => leave(onDismiss)}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-[6px] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-[6px] text-white/50 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
           >
             <Close className="h-3.5 w-3.5" />
           </button>
@@ -101,7 +169,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
           </ul>
         )}
 
-        {running && notice.traces.length === 0 && <p className="mt-2 animate-pulse text-xs text-white/40">Starting…</p>}
+        {running && notice.traces.length === 0 && <p className="mt-2 animate-pulse text-xs text-white/40">Starting</p>}
 
         {notice.phase === 'failed' && <p className="mt-2 text-xs text-red-300">{notice.reason ?? 'The run failed.'}</p>}
         {notice.phase === 'skipped' && <p className="mt-2 text-xs text-white/50">{notice.reason ?? 'The run was skipped.'}</p>}
@@ -118,7 +186,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
             <div className="mt-2.5 flex flex-col gap-2.5">
               {groups.map((group) => (
                 <div key={group.kind}>
-                  <div className="flex items-center gap-1.5 px-0.5 text-2xs font-medium text-white/40">
+                  <div className="flex items-center gap-1.5 px-0.5 text-2xs font-medium uppercase tracking-[0.06em] text-white/40">
                     <span aria-hidden="true" className="grid h-4 w-4 place-items-center text-white/50">{groupIcon(group.kind)}</span>
                     {group.label}
                     <span className="text-white/30">{group.proposals.length}</span>
@@ -135,8 +203,8 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
                             aria-pressed={isSelected}
                             aria-label={`${isSelected ? 'Deselect' : 'Select'}: ${detail.title}`}
                             onClick={() => toggleProposal(index)}
-                            className={`flex w-full items-center gap-1.5 rounded-[6px] px-2 py-1.5 text-left transition-colors ${
-                              isSelected ? 'bg-white/[0.06] hover:bg-white/[0.09]' : 'bg-transparent hover:bg-white/[0.04]'
+                            className={`flex w-full items-center gap-1.5 rounded-[6px] px-2 py-1.5 text-left ring-1 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50 ${
+                              isSelected ? 'bg-white/[0.07] ring-white/[0.08] hover:bg-white/[0.10]' : 'ring-transparent hover:bg-white/[0.04]'
                             }`}
                           >
                             <Globe className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-white/40' : 'text-white/20'}`} />
@@ -174,22 +242,22 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
                 <ChevronDown className={`h-3 w-3 transition-transform duration-150 ${whyOpen ? 'rotate-180' : ''}`} />
               </button>
               {whyOpen && (
-                <p className="mt-1.5 whitespace-pre-wrap px-0.5 text-xs leading-snug text-white/60">
+                <p className="mt-1.5 whitespace-pre-wrap rounded-[6px] bg-white/[0.04] px-2 py-1.5 text-xs leading-snug text-white/65 ring-1 ring-white/[0.06]">
                   {notice.reply ?? `These tabs were matched to the “${notice.toName}” workspace goal.`}
                 </p>
               )}
             </div>
 
-            <div className="mt-2.5 flex gap-1.5">
+            <div className="mt-3 flex gap-1.5 border-t border-white/[0.07] pt-2.5">
               <Button
                 variant="primary"
-                size="md"
+                className="flex-1"
                 disabled={selectedProposals.length === 0}
                 onClick={() => leave(() => onApply(selectedProposals))}
               >
-                Apply changes{selectedProposals.length !== notice.proposals.length ? ` (${selectedProposals.length})` : ''}
+                Apply changes{` (${selectedProposals.length}/${notice.proposals.length})`}
               </Button>
-              <Button variant="secondary" onClick={() => leave(onDismiss)}>
+              <Button variant="secondary" className="flex-1" onClick={() => leave(onDismiss)}>
                 Not now
               </Button>
             </div>

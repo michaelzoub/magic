@@ -25,6 +25,14 @@ export const Settings = (p: SVGProps<SVGSVGElement>) => (
 )
 export const Layers = base(<><path d="M8 2.5 13.5 5.5 8 8.5 2.5 5.5Z" /><path d="m2.5 8.25 5.5 3 5.5-3" /><path d="m2.5 10.75 5.5 3 5.5-3" opacity=".55" /></>)
 export const Check = base(<path d="m3.5 8.5 3 3 6-7" />)
+/** Filled warning triangle; colour comes from `color`/`className` (currentColor), the cut-out mark stays dark. */
+export const WarningTriangle = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" {...p}>
+    <path d="M8 1.8a1.4 1.4 0 0 1 1.22.7l5.1 9A1.4 1.4 0 0 1 13.1 13.6H2.9a1.4 1.4 0 0 1-1.22-2.1l5.1-9A1.4 1.4 0 0 1 8 1.8Z" fill="currentColor" />
+    <path d="M8 6v3.2" stroke="#262626" strokeWidth={1.5} strokeLinecap="round" />
+    <circle cx="8" cy="11.4" r="0.95" fill="#262626" />
+  </svg>
+)
 export const User = base(<><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13.5c.6-2.3 2.4-3.5 4.5-3.5s3.9 1.2 4.5 3.5" /></>)
 export const Briefcase = base(<><rect x="2.5" y="5" width="11" height="8" rx="1.5" /><path d="M6 5V3.8c0-.4.3-.8.8-.8h2.4c.5 0 .8.4.8.8V5M2.5 8.5h11" /></>)
 export const GradCap = base(<><path d="M8 3 1.5 6 8 9l6.5-3Z" /><path d="M4.5 7.5v3c1 1 2.2 1.5 3.5 1.5s2.5-.5 3.5-1.5v-3" /></>)

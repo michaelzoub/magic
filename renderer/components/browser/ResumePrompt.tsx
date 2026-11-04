@@ -123,7 +123,7 @@ export function ResumePrompt({ checkpoint, onResume, onDismissed }: {
           </ul>
         )}
         <div className="mt-4 flex items-center gap-1.5">
-          <Button variant="primary" size="md" onClick={onResume}>
+          <Button variant="primary" onClick={onResume}>
             Pick up where you left off
           </Button>
           <Button

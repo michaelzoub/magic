@@ -201,13 +201,13 @@ function renderInline(tokens: InlineToken[], keyPrefix: string): ReactNode[] {
         return <br key={key} />
       case 'code':
         return (
-          <code key={key} className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-xs text-neutral-800">
+          <code key={key} className="rounded bg-white/10 px-1 py-0.5 font-mono text-xs text-white/90">
             {t.text}
           </code>
         )
       case 'bold':
         return (
-          <strong key={key} className="font-semibold text-neutral-900">
+          <strong key={key} className="font-semibold text-white">
             {renderInline(t.children, key)}
           </strong>
         )
@@ -217,7 +217,7 @@ function renderInline(tokens: InlineToken[], keyPrefix: string): ReactNode[] {
         return <s key={key}>{renderInline(t.children, key)}</s>
       case 'link':
         return (
-          <a key={key} href={t.href} target="_blank" rel="noreferrer" className="font-medium text-neutral-900 underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-600">
+          <a key={key} href={t.href} target="_blank" rel="noreferrer" className="font-medium text-white underline decoration-white/30 underline-offset-2 hover:decoration-white/70">
             {renderInline(t.children, key)}
           </a>
         )
@@ -227,16 +227,16 @@ function renderInline(tokens: InlineToken[], keyPrefix: string): ReactNode[] {
 
 const headingClass = (level: number) =>
   level <= 1
-    ? 'mb-1.5 mt-1 text-lg font-semibold text-neutral-900 first:mt-0'
+    ? 'mb-1.5 mt-1 text-lg font-semibold text-white first:mt-0'
     : level === 2
-      ? 'mb-1.5 mt-2 text-base font-semibold text-neutral-900 first:mt-0'
-      : 'mb-1 mt-2 text-sm font-semibold text-neutral-900 first:mt-0'
+      ? 'mb-1.5 mt-2 text-base font-semibold text-white first:mt-0'
+      : 'mb-1 mt-2 text-sm font-semibold text-white first:mt-0'
 
 /** Render agent reply text as formatted, readable chat content. */
-export function MarkdownText({ text }: { text: string }) {
+export function MarkdownText({ text, className = '' }: { text: string; className?: string }) {
   const blocks = parseMarkdown(text)
   return (
-    <div className="min-w-0 text-base leading-relaxed text-neutral-800 [overflow-wrap:anywhere]">
+    <div className={`min-w-0 text-base leading-relaxed text-white/85 [overflow-wrap:anywhere] ${className}`}>
       {blocks.map((b, idx) => {
         const key = `b-${idx}`
         switch (b.type) {
@@ -257,7 +257,7 @@ export function MarkdownText({ text }: { text: string }) {
           case 'list': {
             const Tag = b.ordered ? 'ol' : 'ul'
             return (
-              <Tag key={key} className={`mb-2 space-y-1 pl-5 last:mb-0 ${b.ordered ? 'list-decimal' : 'list-disc'} marker:text-neutral-300`}>
+              <Tag key={key} className={`mb-2 space-y-1 pl-5 last:mb-0 ${b.ordered ? 'list-decimal' : 'list-disc'} marker:text-white/30`}>
                 {b.items.map((item, itemIdx) => (
                   <li key={`${key}-${itemIdx}`}>{renderInline(item, `${key}-${itemIdx}`)}</li>
                 ))}
@@ -266,13 +266,13 @@ export function MarkdownText({ text }: { text: string }) {
           }
           case 'code':
             return (
-              <pre key={key} className="mb-2 overflow-x-auto rounded-lg bg-neutral-900 p-3 font-mono text-xs leading-relaxed text-neutral-50 last:mb-0">
+              <pre key={key} className="mb-2 overflow-x-auto rounded-lg bg-black/30 p-3 font-mono text-xs leading-relaxed text-white/90 ring-1 ring-white/[0.06] last:mb-0">
                 {b.text}
               </pre>
             )
           case 'quote':
             return (
-              <blockquote key={key} className="mb-2 rounded-lg bg-neutral-50 px-3 py-2 text-neutral-500 last:mb-0">
+              <blockquote key={key} className="mb-2 rounded-lg bg-white/[0.06] px-3 py-2 text-white/55 last:mb-0">
                 {renderInline(b.inline, key)}
               </blockquote>
             )
@@ -281,9 +281,9 @@ export function MarkdownText({ text }: { text: string }) {
               <div key={key} className="mb-2 overflow-x-auto last:mb-0">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-neutral-50">
+                    <tr className="bg-white/[0.06]">
                       {b.header.map((cell, c) => (
-                        <th key={c} className="px-2 py-1 text-left font-semibold text-neutral-900">
+                        <th key={c} className="px-2 py-1 text-left font-semibold text-white">
                           {renderInline(cell, `${key}-h${c}`)}
                         </th>
                       ))}
@@ -291,7 +291,7 @@ export function MarkdownText({ text }: { text: string }) {
                   </thead>
                   <tbody>
                     {b.rows.map((row, r) => (
-                      <tr key={r} className={r % 2 ? 'bg-neutral-50' : undefined}>
+                      <tr key={r} className={r % 2 ? 'bg-white/[0.04]' : undefined}>
                         {row.map((cell, c) => (
                           <td key={c} className="px-2 py-1 align-top">
                             {renderInline(cell, `${key}-${r}-${c}`)}

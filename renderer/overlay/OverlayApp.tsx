@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { magicPopoverPosition, menuPosition, type SurfaceKind, type SurfaceRequest } from '@shared/overlay'
+import { MAGIC_POPOVER_HEIGHT, WORKSPACE_MENU_WIDTH, magicPopoverPosition, menuPosition, type SurfaceKind, type SurfaceRequest } from '@shared/overlay'
 import type { AgentRunResult, AgentSwitchNoticeState } from '@shared/agent'
 import type { OnboardingFlow } from '@core/onboarding'
 import { MemoryDialog } from '@/components/memory/MemoryDialog'
@@ -12,8 +12,9 @@ import { WorkspaceMenuContent } from '@/components/workspaces/WorkspaceSwitcher'
 import { MagicPopoverContent } from '@/components/browser/MagicPopover'
 import { AgentSwitchNotice } from '@/components/browser/AgentSwitchNotice'
 import { WorkspaceDriftNotice } from '@/components/browser/WorkspaceDriftNotice'
+import { visibleNotification } from '@core/notifications/ordering'
 import type { WorkspaceDriftNoticeState } from '@shared/overlay'
-import { surface } from '@/components/ui/surface'
+import { surface, topmostSurfaceZ } from '@/components/ui/surface'
 import { motion } from '@/motion'
 
 /**
@@ -29,17 +30,22 @@ export function OverlayApp() {
   useEffect(() => host?.onAgentNotice(setNotice), [host])
   const [drift, setDrift] = useState<WorkspaceDriftNoticeState | null>(null)
   useEffect(() => host?.onDriftNotice(setDrift), [host])
+  // Notification ordering (see @core/notifications/ordering): exactly one
+  // notice is visible — the highest-priority one; the other queues and
+  // appears when the visible one clears. A queued drift toast remounts
+  // when shown, so its auto-dismiss timer starts fresh.
+  const visible = visibleNotification({ agent: notice, drift })
   return (
     <>
       <OverlaySurface />
-      {drift && host && (
+      {visible === 'drift' && drift && host && (
         <WorkspaceDriftNotice
           workspaceName={drift.workspaceName}
           onDismiss={() => { void host.requestAction({ type: 'drift:dismiss-notice' }) }}
           onQuit={() => { void host.requestAction({ type: 'drift:quit-workspace' }) }}
         />
       )}
-      {notice && host && (
+      {visible === 'agent' && notice && host && (
         <AgentSwitchNotice
           notice={notice}
           // No local setNotice(null): the shell clears its notice on
@@ -160,15 +166,28 @@ function WorkspaceMenuSurface({ req, onClose, onDeleted }: {
   const host = window.overlayHost!
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState(() =>
-    menuPosition(req, { width: 200, height: 320 }, { width: window.innerWidth, height: window.innerHeight })
+    menuPosition(req, { width: WORKSPACE_MENU_WIDTH, height: 320 }, { width: window.innerWidth, height: window.innerHeight })
   )
 
-  // Clamp with the panel's real height once it has mounted.
+  // Re-clamp whenever the panel's real size changes: opening the inline
+  // create form makes it much taller, and a one-shot mount measurement
+  // would leave the goal field hanging off the window's bottom edge.
   useLayoutEffect(() => {
     const el = panelRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    setPos(menuPosition(req, { width: r.width, height: r.height }, { width: window.innerWidth, height: window.innerHeight }))
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      const next = menuPosition(req, { width: r.width, height: r.height }, { width: window.innerWidth, height: window.innerHeight })
+      setPos((prev) => (prev.x === next.x && prev.y === next.y && prev.width === next.width ? prev : next))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -217,7 +236,7 @@ function MagicPopoverSurface({ req, onClose }: {
   const [context, setContext] = useState(req.context)
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState(() =>
-    magicPopoverPosition(req.anchor, { height: 200 }, { width: window.innerWidth, height: window.innerHeight })
+    magicPopoverPosition(req.anchor, { height: MAGIC_POPOVER_HEIGHT }, { width: window.innerWidth, height: window.innerHeight })
   )
 
   // Re-clamp whenever the panel's real height changes (chat transcript
@@ -245,12 +264,12 @@ function MagicPopoverSurface({ req, onClose }: {
   }, [req.anchor])
 
   return (
-    <div className="fixed inset-0" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`fixed inset-0 ${topmostSurfaceZ}`} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Magic"
-        className="no-drag fixed z-50 flex max-h-[calc(100vh-8px)] flex-col overflow-hidden rounded-lg bg-white text-neutral-900 shadow-[0_24px_70px_rgb(0_0_0/0.28)]"
+        className={`no-drag fixed ${topmostSurfaceZ} flex max-h-[calc(100vh-8px)] flex-col overflow-hidden rounded-lg ring-1 ring-white/10 ${surface}`}
         style={{ left: pos.x, top: pos.y, width: pos.width }}
       >
         <MagicPopoverContent

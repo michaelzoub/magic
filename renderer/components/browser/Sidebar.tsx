@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode, SVGProps } from 'react'
-import { ChevronRight, ChevronUpDown, Memory, Plus, Settings, SidebarIcon } from '../ui/icons'
+import type { TargetedKeyboardEvent, TargetedPointerEvent } from 'preact'
+import { ChevronRight, ChevronUpDown, Memory, Settings, SidebarIcon } from '../ui/icons'
 import { MagicMark } from '../ui/Brand'
 import { Popover, Tooltip } from '../ui'
 import { MagicPopoverContent } from './MagicPopover'
@@ -14,10 +15,10 @@ import type { MagicActivity, MagicContext, MagicTab } from '@shared/overlay'
 import { PixelTotem } from '@/features/identity'
 
 /**
- * Side panel with exactly two fixed states: expanded (232px) and the
- * collapsed rail (52px), toggled from the control at the top of the
- * panel itself. It is not drag-resizable. Toggling tweens between
- * the two widths with GSAP (`motion.panelWidth`, 160ms): the aside's
+ * Side panel with two states: expanded (232px by default, drag-resizable
+ * via the handle on its right edge, persisted) and the collapsed rail
+ * (52px), toggled from the control at the top of the panel itself.
+ * Toggling tweens between the two widths with GSAP (`motion.panelWidth`, 160ms): the aside's
  * width animates in per-frame pixel steps and the flex page area beside
  * it follows every frame (its ResizeObserver keeps the native page view
  * glued to the moving edge), instead of both jumping in a single frame.
@@ -36,6 +37,23 @@ import { PixelTotem } from '@/features/identity'
  */
 export const SIDEBAR_WIDTH = 232
 export const RAIL = 52
+/** Drag-resize bounds for the expanded panel: wide enough that labels
+ *  never render truncated (above LABEL_REVEAL_WIDTH), narrow enough
+ *  that the page area beside it stays usable. */
+export const SIDEBAR_MIN_WIDTH = 200
+export const SIDEBAR_MAX_WIDTH = 420
+const SIDEBAR_WIDTH_KEY = 'magic:sidebar-width'
+
+const clampSidebarWidth = (w: number) => Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(w)))
+
+function storedSidebarWidth(): number {
+  try {
+    const raw = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY))
+    return raw ? clampSidebarWidth(raw) : SIDEBAR_WIDTH
+  } catch {
+    return SIDEBAR_WIDTH
+  }
+}
 
 type Item = { label: string; Icon: (p: SVGProps<SVGSVGElement>) => ReactNode }
 
@@ -64,11 +82,11 @@ function RailButton({ label, open, count, onClick, children }: { label: string; 
  *  to full width that no label renders truncated mid-tween. */
 const LABEL_REVEAL_WIDTH = 192
 
-export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, onSettings, profile, ws, onSelectWorkspace, onCreateWorkspace, onDeleteWorkspace, magicTabs, onOpenMagicTab, onAskRequest, assistance, magicActivity, onSetAssistance, onSetExclusions, onUndoMagic }: {
+export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, onSettings, profile, ws, workspaceFeedback, onSelectWorkspace, onCreateWorkspace, onDeleteWorkspace, magicTabs, onOpenMagicTab, onAskRequest, assistance, magicActivity, onSetAssistance, onSetExclusions, onUndoMagic }: {
   open: boolean
   onToggle(): void
   /** Local user profile for the account row: display name + totem spec (null before onboarding completes). */
-  profile?: { displayName: string; identity: IdentitySpec | null } | null
+  profile?: { displayName: string; identity: IdentitySpec | null; identitySeed?: string | null } | null
   /** Animated panel width, reported every tween frame (and once on mount)
    *  so the shell can move width-dependent chrome (tab-strip inset) in
    *  sync instead of snapping it. Direct DOM writes only — no re-render. */
@@ -77,6 +95,8 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
   memoryCount?: number
   onSettings(): void
   ws: UseWorkspaces
+  /** In-flight / just-completed switch feedback for the target workspace row. */
+  workspaceFeedback?: { id: string; phase: 'preparing' | 'activated' } | null
   /** Switching sets the target workspace's respective tabs as the open tabs (App enacts it). */
   onSelectWorkspace(id: string): void
   onCreateWorkspace(name: string, goal: string): Promise<string | null>
@@ -96,10 +116,8 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
   /** Undo a recorded reorganization by checkpoint id. */
   onUndoMagic?(checkpointId: string): void
 }) {
-  const openWorkspaceMenu = () => document.querySelector<HTMLButtonElement>('[data-workspace-menu]')?.click()
-  // Whether the Workspaces overview (menu) is open: while it is, the
-  // "Workspaces" nav row owns the strong selected state and the active
-  // workspace row in the list below drops to a subtler current marker.
+  // Whether the Workspaces overview (menu, opened from the section
+  // header below) is open, so the header trigger can carry its open state.
   const [workspaceOverviewOpen, setWorkspaceOverviewOpen] = useState(false)
   // Incremented when the profile row is opened: plays one finite pulse on
   // the totem (PixelTotem owns the tween; nothing renders continuously).
@@ -152,7 +170,8 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
       resumable,
       assistance: assistance ?? DEFAULT_ASSISTANCE,
       workspaces: ws.all.map((w) => ({ id: w.id, name: w.name })),
-      activity: magicActivity ?? []
+      activity: magicActivity ?? [],
+      identitySeed: profile?.identitySeed ?? null
     }
   }
   const openMagicTab = (tab: MagicTab) => {
@@ -184,12 +203,71 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
     setLabels(next)
   }
   const firstRender = useRef(true)
+  // User-chosen expanded width (drag handle on the right edge), persisted
+  // across launches. The ref mirrors it for drag/tween callbacks, which
+  // write the width straight to the DOM without re-rendering per frame.
+  const [expandedWidth, setExpandedWidth] = useState(storedSidebarWidth)
+  const expandedWidthRef = useRef(expandedWidth)
+  const [resizing, setResizing] = useState(false)
+
+  const applyWidth = useCallback((w: number) => {
+    const el = asideRef.current
+    if (el) el.style.width = `${w}px`
+    widthChangeRef.current?.(w)
+  }, [])
+
+  /** Commit a new expanded width: state (for the separator's aria value),
+   *  ref, and localStorage. The DOM width is already there (applyWidth). */
+  const commitWidth = useCallback((w: number) => {
+    const next = clampSidebarWidth(w)
+    expandedWidthRef.current = next
+    setExpandedWidth(next)
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next))
+    } catch { /* private mode etc. — resizing still works this session */ }
+  }, [])
+
+  const onResizePointerDown = (e: TargetedPointerEvent<HTMLDivElement>) => {
+    if (!open || e.button !== 0) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = asideRef.current?.getBoundingClientRect().width ?? expandedWidthRef.current
+    setResizing(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: PointerEvent) => applyWidth(clampSidebarWidth(startWidth + ev.clientX - startX))
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      setResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      commitWidth(startWidth + ev.clientX - startX)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
+
+  const onResizeKeyDown = (e: TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (!open) return
+    const step = e.shiftKey ? 24 : 8
+    const next = e.key === 'ArrowRight' ? expandedWidthRef.current + step
+      : e.key === 'ArrowLeft' ? expandedWidthRef.current - step
+      : e.key === 'Home' ? SIDEBAR_WIDTH
+      : null
+    if (next === null) return
+    e.preventDefault()
+    applyWidth(clampSidebarWidth(next))
+    commitWidth(next)
+  }
 
   // Initial width, before first paint: no tween on mount.
   useLayoutEffect(() => {
     const el = asideRef.current
     if (!el) return
-    const w = open ? SIDEBAR_WIDTH : RAIL
+    const w = open ? expandedWidthRef.current : RAIL
     el.style.width = `${w}px`
     widthChangeRef.current?.(w)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,7 +284,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
     if (!open) setLabelsNow(false)
     const tween = motion.panelWidth(
       el,
-      open ? SIDEBAR_WIDTH : RAIL,
+      open ? expandedWidthRef.current : RAIL,
       (w) => {
         widthChangeRef.current?.(w)
         // Expand: reveal labels only once they can render untruncated.
@@ -281,7 +359,6 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
       </Tooltip>
 
       <nav className="mt-1 flex flex-col gap-0.5">
-        <WorkspaceMenu open={labels} menuOpen={workspaceOverviewOpen} onMenuOpenChange={setWorkspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} onDelete={onDeleteWorkspace} />
         {primary.map(({ label, Icon }) => (
           <RailButton key={label} label={label} open={labels} count={label === 'Memory' ? memoryCount : undefined} onClick={label === 'Memory' ? onMemory : undefined}>
             <Icon />
@@ -290,34 +367,36 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
       </nav>
 
       {/* Context area: workspaces picked from the menu, pinned items, recent contexts. */}
-      {ws.list.length > 0 && (
-        <section className="mt-3 flex flex-col gap-0.5">
-          {/* Section header: label on the left, + (New workspace) on the
-              right edge. On the rail there is no right edge to speak of,
-              so the + becomes a centred rail row instead. Both forms are
-              h-7: a shorter open header would push every workspace row
-              below it up/down by the difference when the panel toggles. */}
-          {labels ? (
-            <div className="flex h-7 items-center justify-between px-2">
-              <span className="text-2xs font-medium uppercase tracking-[0.08em] text-chrome-faint">Your workspaces</span>
-              <button
-                type="button"
-                aria-label="New workspace"
-                onClick={(e) => (motion.press(e.currentTarget), openWorkspaceMenu())}
-                className="no-drag grid h-5 w-5 shrink-0 place-items-center rounded-[6px] text-chrome-text transition-colors hover:bg-chrome-hover/[0.06]"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <RailButton label="New workspace" open={labels} onClick={openWorkspaceMenu}>
-              {/* Same 14px glyph as the open header's + — never resized. */}
-              <Plus className="h-3.5 w-3.5" />
-            </RailButton>
-          )}
-          <WorkspaceList open={labels} overviewOpen={workspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} />
-        </section>
-      )}
+      <section className="mt-3 flex flex-col gap-0.5">
+        {/* Section header: label on the left, + on the right edge. The +
+            is the one trigger for the workspaces overview menu (there is
+            no separate "Workspaces" nav row). On the rail there is no
+            right edge to speak of, so the + becomes a centred rail row
+            instead. Both forms are h-7: a shorter open header would push
+            every workspace row below it up/down by the difference when
+            the panel toggles. The header renders even with no listed
+            workspaces, so the + is always reachable. */}
+        {labels ? (
+          <div
+            className="flex h-7 cursor-pointer items-center justify-between rounded-[6px] px-2 transition-colors duration-100 hover:bg-chrome-hover/[0.06]"
+            // The whole header row opens the menu, not just the + button:
+            // forward any click that didn't land on the trigger itself
+            // (the trigger's own click toggles, so forwarding it too
+            // would open and immediately close).
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('[data-workspace-menu]')) {
+                e.currentTarget.querySelector<HTMLElement>('[data-workspace-menu]')?.click()
+              }
+            }}
+          >
+            <span className="text-2xs font-medium uppercase tracking-[0.08em] text-chrome-faint">Your workspaces</span>
+            <WorkspaceMenu open={labels} menuOpen={workspaceOverviewOpen} onMenuOpenChange={setWorkspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} onDelete={onDeleteWorkspace} />
+          </div>
+        ) : (
+          <WorkspaceMenu open={labels} menuOpen={workspaceOverviewOpen} onMenuOpenChange={setWorkspaceOverviewOpen} ws={ws} onSelect={onSelectWorkspace} onCreate={onCreateWorkspace} onDelete={onDeleteWorkspace} />
+        )}
+        <WorkspaceList open={labels} ws={ws} feedback={workspaceFeedback} onSelect={onSelectWorkspace} />
+      </section>
 
       <div className="mt-auto">
         <div className="pt-2">
@@ -335,7 +414,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
                 onClose={closeMagic}
                 placement="right-end"
                 label="Magic"
-                className="!rounded-lg !bg-white !p-0 !text-neutral-900 shadow-[0_24px_70px_rgb(0_0_0/0.28)]"
+                className="!z-[100] !rounded-lg !p-0 shadow-[0_24px_70px_rgb(0_0_0/0.35)]"
               >
                 <MagicPopoverContent
                   onClose={closeMagic}
@@ -381,6 +460,28 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
           </button>
         </div>
       </div>
+
+      {/* Drag-resize handle on the right edge (expanded only; the rail
+          stays a fixed 52px). Writes the width straight to the aside on
+          every move so the flex page area — and its native view —
+          follows; the final width is committed/persisted on release.
+          Double-click resets to the default; arrow keys resize when
+          focused (Shift = larger steps, Home = default). */}
+      {open && (
+        <div
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuenow={Math.round(expandedWidth)}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onKeyDown={onResizeKeyDown}
+          onDblClick={() => (applyWidth(SIDEBAR_WIDTH), commitWidth(SIDEBAR_WIDTH))}
+          className={`no-drag absolute inset-y-0 right-0 z-20 w-1.5 touch-none outline-none transition-colors hover:bg-chrome-hover/[0.12] focus-visible:bg-chrome-hover/[0.12] ${resizing ? 'cursor-col-resize bg-chrome-hover/[0.12]' : 'cursor-col-resize'}`}
+        />
+      )}
     </aside>
   )
 }

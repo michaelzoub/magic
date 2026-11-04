@@ -349,7 +349,6 @@ export function ProfileIdentityDialog({ open, completed, onClose, onImportLogins
                   </Button>
                   <Button
                     variant="secondary"
-                    size="md"
                     disabled={saving || !draftName.trim()}
                     onClick={() => void save()}
                   >

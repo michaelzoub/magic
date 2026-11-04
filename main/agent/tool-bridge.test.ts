@@ -29,4 +29,14 @@ describe('dispatchBridgeCall', () => {
     await expect(dispatchBridgeCall(c, 'nope', 'createTab', [])).rejects.toMatchObject({ code: 'forbidden' })
     expect(c.browser.switchWorkspace).not.toHaveBeenCalled()
   })
+
+  it('dispatches workspace calls only when a directory is wired', async () => {
+    const c = ctx()
+    await expect(dispatchBridgeCall(c, 'workspaces', 'list', [])).rejects.toMatchObject({ code: 'unavailable' })
+    const switchTo = vi.fn(async () => {})
+    const wired = { ...c, workspaces: { list: async () => [], switchTo } }
+    await dispatchBridgeCall(wired, 'workspaces', 'switchTo', ['w'])
+    expect(switchTo).toHaveBeenCalledWith('w')
+    await expect(dispatchBridgeCall(wired, 'workspaces', 'delete', ['w'])).rejects.toMatchObject({ code: 'forbidden' })
+  })
 })

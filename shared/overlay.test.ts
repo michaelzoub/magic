@@ -11,20 +11,20 @@ const menu = (placement: 'bottom-start' | 'right-start'): Extract<SurfaceRequest
 })
 
 describe('menuPosition', () => {
-  it('opens below the trigger at trigger width for bottom-start', () => {
-    expect(menuPosition(menu('bottom-start'), { width: 232, height: 200 }, { width: 1280, height: 820 })).toEqual({
+  it('opens below the trigger at the fixed menu width for bottom-start', () => {
+    expect(menuPosition(menu('bottom-start'), { width: 320, height: 200 }, { width: 1280, height: 820 })).toEqual({
       x: 10,
       y: 140,
-      width: 232
+      width: 320
     })
   })
 
-  it('opens beside the trigger at fixed width for right-start (collapsed rail)', () => {
+  it('opens beside the trigger at the fixed menu width for right-start (collapsed rail)', () => {
     const req = { ...menu('right-start'), anchor: { x: 6, y: 100, width: 40, height: 36 } }
-    expect(menuPosition(req, { width: 200, height: 200 }, { width: 1280, height: 820 })).toEqual({
+    expect(menuPosition(req, { width: 320, height: 200 }, { width: 1280, height: 820 })).toEqual({
       x: 54,
       y: 100,
-      width: 200
+      width: 320
     })
   })
 

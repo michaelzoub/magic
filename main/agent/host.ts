@@ -18,12 +18,15 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import {
   canAssistanceRestructure,
   DEFAULT_ASSISTANCE,
   isSiteExcluded,
   type AgentChatContext,
+  type DriftAssessmentRequest,
+  type DriftAssessmentResult,
   type AgentStreamEvent,
   type AgentStreamListener,
   type AgentRunResult,
@@ -33,10 +36,13 @@ import {
   type WorkspaceSwitchNotice
 } from '@shared/agent'
 import { buildAgentChatPrompt } from '@agent/lib/chat'
+import { buildDriftPrompt, extractDriftVerdicts } from '@agent/lib/drift'
+import { createInferenceClient, type InferenceClient } from '@agent/lib/inference'
 import { buildWorkspaceSwitchPrompt } from '@agent/lib/switch'
 import { extractCheckpointVerdict } from '@agent/lib/verdict'
 import { createAgentRuntime, type AgentRuntime } from '@agent/lib/runtime'
 import type { ElectronEngine } from '../browser/electron-engine'
+import type { WorkspaceDirectory } from '@agent/lib/tools/ports'
 import { createElectronToolContext } from './browser-tools'
 import { createStagedToolContext } from './staged-context'
 import { startToolBridge, type ToolBridge } from './tool-bridge'
@@ -46,6 +52,8 @@ const DEFAULT_EVE_PORT = 3217
 export const SWITCH_RUN_TIMEOUT_MS = 15_000
 /** Hard cap for one chat turn; tool-driven tasks need longer than a switch run. */
 export const CHAT_RUN_TIMEOUT_MS = 120_000
+/** Hard cap for one goal-drift judgment; it is a single bare inference call. */
+export const DRIFT_RUN_TIMEOUT_MS = 8_000
 
 export interface EmbeddedAgentHostOptions {
   appRoot: string
@@ -60,10 +68,18 @@ export interface EmbeddedAgentHostOptions {
   timeoutMs?: number
   /** Per-chat-turn timeout; defaults to CHAT_RUN_TIMEOUT_MS (env MAGIC_AGENT_CHAT_TIMEOUT_MS). */
   chatTimeoutMs?: number
+  /** Per-drift-judgment timeout; defaults to DRIFT_RUN_TIMEOUT_MS (env MAGIC_AGENT_DRIFT_TIMEOUT_MS). */
+  driftTimeoutMs?: number
+  /** Bare-inference client for drift judgment; defaults to a direct model call (never the Eve agent). */
+  inference?: InferenceClient
   /** Initial global background-assistance state (e.g. loaded from persisted settings). */
   assistance?: AssistanceSettings
   /** Shared global assistance state; defaults to the process-wide singleton. */
   assistanceState?: BackgroundAssistance
+  /** Workspace list/switch for chat turns (the store lives in the renderer). */
+  workspaces?: WorkspaceDirectory
+  /** Awaited before an agent tool call closes a tab, so the shell can highlight it first. */
+  onTabClosing?: (tabId: string) => Promise<void> | void
 }
 
 /**
@@ -136,6 +152,33 @@ interface Waiter {
   onEvent?: AgentStreamListener
 }
 
+/**
+ * A loopback port Eve can bind: `preferred` when free, otherwise an
+ * ephemeral one. Probing by binding (then releasing) is what keeps a
+ * stale Eve listener from ever being handed our bridge env's port.
+ */
+export function findFreePort(preferred?: number): Promise<number> {
+  const tryBind = (port: number) =>
+    new Promise<number | null>((resolve) => {
+      const probe = createServer()
+      probe.once('error', () => resolve(null))
+      probe.listen(port, '127.0.0.1', () => {
+        const address = probe.address()
+        const bound = address && typeof address !== 'string' ? address.port : null
+        probe.close(() => resolve(bound))
+      })
+    })
+  return (async () => {
+    if (preferred) {
+      const port = await tryBind(preferred)
+      if (port !== null) return port
+    }
+    const port = await tryBind(0)
+    if (port === null) throw new Error('Could not allocate a port for the Eve server')
+    return port
+  })()
+}
+
 /** Process-wide assistance state, so every window's host sees the same toggle. */
 const sharedAssistance = new BackgroundAssistance()
 
@@ -143,6 +186,8 @@ export class EmbeddedAgentHost {
   private bridge: ToolBridge | null = null
   private child: ChildProcess | null = null
   private runtime: AgentRuntime | null = null
+  /** Lazily created bare-inference client for drift judgment; never an Eve runtime. */
+  private inference: InferenceClient | null = null
   private ready: Promise<AgentRunResult | null> | null = null
   private pending: { notice: WorkspaceSwitchNotice; waiters: Waiter[] } | null = null
   /** Proposals being staged by the in-flight switch run; null outside one. */
@@ -233,6 +278,45 @@ export class EmbeddedAgentHost {
     const run = this.chatQueue.then(() => this.askOnce(text, visible, onEvent))
     this.chatQueue = run.catch(() => {})
     return run
+  }
+
+  /**
+   * Judge whether tabs are unrelated to the active workspace's goal.
+   * Deliberately NOT an agent run: one bare inference call and back
+   * (`@agent/lib/inference`) — no Eve server, session, tools, or thinking,
+   * so feedback lands in about a second. Gated like restructuring (off /
+   * excluded workspace / excluded site means the model never sees the
+   * tab), but it only judges, it never restructures. Fails soft: no reply
+   * or no verdicts yields `unknown`, never drift. Never rejects.
+   */
+  async assessDrift(request: DriftAssessmentRequest): Promise<DriftAssessmentResult> {
+    const skipped = (reason: string): DriftAssessmentResult => ({ status: 'skipped', verdicts: [], reason })
+    if (!request.workspace || request.tabs.length === 0) return skipped('Nothing to judge')
+    if (!this.assistance.get().active) return skipped('Background assistance is off')
+    if (!this.assistance.canRestructure(request.workspace.id)) return skipped(`Workspace “${request.workspace.name}” is excluded from background assistance`)
+    if (process.env.MAGIC_AGENT_ENABLED === '0') return skipped('MAGIC_AGENT_ENABLED=0')
+    if (this.disposed) return skipped('Agent host disposed')
+    const { excludedSites } = this.assistance.get()
+    const tabs = request.tabs.filter((t) => !isSiteExcluded(t.url, excludedSites))
+    if (tabs.length === 0) return skipped('All tabs are on excluded sites')
+    const inference = this.opts.inference ?? (this.inference ??= createInferenceClient())
+    const timeoutMs = this.opts.driftTimeoutMs ?? Number(process.env.MAGIC_AGENT_DRIFT_TIMEOUT_MS ?? DRIFT_RUN_TIMEOUT_MS)
+    try {
+      const reply = await inference.complete(buildDriftPrompt({ workspace: request.workspace, tabs }), {
+        signal: AbortSignal.timeout(timeoutMs)
+      })
+      const verdicts = extractDriftVerdicts(reply, tabs.map((t) => t.id))
+      this.log(`drift judgment for “${request.workspace.name}”: ${verdicts.length}/${tabs.length} judged`)
+      return { status: 'completed', verdicts, runtime: inference.id }
+    } catch (err) {
+      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        this.log(`drift judgment timed out after ${timeoutMs}ms`)
+        return { status: 'failed', verdicts: [], runtime: inference.id, reason: `Inference timed out after ${timeoutMs}ms` }
+      }
+      const message = err instanceof Error ? err.message : String(err)
+      this.log(`drift judgment failed: ${message}`)
+      return { status: 'failed', verdicts: [], runtime: inference.id, reason: message }
+    }
   }
 
   private async askOnce(
@@ -329,20 +413,34 @@ export class EmbeddedAgentHost {
 
   /** Lazily starts bridge + Eve server once; resolves to an error result on failure, null when ready. */
   private ensureReady(): Promise<AgentRunResult | null> {
-    this.ready ??= this.setup().catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err)
-      this.log(`setup failed: ${message}`)
-      return { status: 'skipped', reply: null, reason: message } satisfies AgentRunResult
-    })
+    if (!this.ready) {
+      const ready = this.setup().catch(async (err: unknown) => {
+        // Tear down the half-started bridge/Eve so a retry starts clean.
+        this.child?.kill()
+        this.child = null
+        await this.bridge?.close().catch(() => {})
+        this.bridge = null
+        const message = err instanceof Error ? err.message : String(err)
+        this.log(`setup failed: ${message}`)
+        return { status: 'skipped', reply: null, reason: message } satisfies AgentRunResult
+      })
+      this.ready = ready
+      // Never cache a failed setup: the next run must retry (e.g. Eve now
+      // installed, or a transient spawn failure), not replay the failure.
+      void ready.then((result) => {
+        if (result && this.ready === ready) this.ready = null
+      })
+    }
     return this.ready
   }
 
   private async setup(): Promise<null> {
     this.bridge = await startToolBridge(() => {
-      const ctx = createElectronToolContext(this.opts.engine)
       // During a switch run, hand the agent a staging context so its tab
-      // changes become proposals instead of immediate mutations.
-      return this.staging ? createStagedToolContext(ctx, this.staging) : ctx
+      // changes become proposals instead of immediate mutations — and no
+      // workspace switching mid-switch.
+      if (this.staging) return createStagedToolContext(createElectronToolContext(this.opts.engine), this.staging)
+      return createElectronToolContext(this.opts.engine, { workspaces: this.opts.workspaces, onTabClosing: this.opts.onTabClosing })
     })
 
     if (this.opts.eveServer === 'none') {
@@ -352,28 +450,50 @@ export class EmbeddedAgentHost {
     }
 
     const externalUrl = process.env.EVE_AGENT_URL
-    const port = Number(process.env.EVE_PORT ?? DEFAULT_EVE_PORT)
-    const baseUrl = externalUrl ?? `http://127.0.0.1:${port}`
-
-    if (!externalUrl && !(await this.healthy(baseUrl))) {
-      const eveBin = join(this.opts.appRoot, 'node_modules', 'eve', 'bin', 'eve.js')
-      if (!existsSync(eveBin)) throw new Error(`Eve is not installed at ${eveBin}; run npm install`)
-      this.log(`starting Eve server on port ${port}`)
-      this.child = spawn(this.opts.execPath ?? process.execPath, [eveBin, 'dev', '--no-ui', '--port', String(port)], {
-        cwd: this.opts.appRoot,
-        env: {
-          ...process.env,
-          ELECTRON_RUN_AS_NODE: '1',
-          MAGIC_TOOL_BRIDGE_URL: this.bridge.url,
-          MAGIC_TOOL_BRIDGE_TOKEN: this.bridge.token
-        },
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
-      this.child.stdout?.on('data', (d: Buffer) => this.log(`eve: ${String(d).trim()}`))
-      this.child.stderr?.on('data', (d: Buffer) => this.log(`eve: ${String(d).trim()}`))
-      this.child.once('exit', (code) => this.log(`Eve server exited (code ${code})`))
-      await this.waitHealthy(baseUrl, 90_000)
+    if (externalUrl) {
+      // User-managed server: reuse it as-is. This host cannot set its env,
+      // so it must have been started with the bridge env itself (see header).
+      this.runtime = this.opts.runtime ?? createAgentRuntime({ baseUrl: externalUrl })
+      this.log(`ready (runtime=${this.runtime.id}, eve=${externalUrl}, bridge=${this.bridge.url})`)
+      return null
     }
+
+    // Never reuse a server already listening on the Eve port. Its bridge
+    // env (MAGIC_TOOL_BRIDGE_URL/TOKEN) was baked in at *its* spawn time
+    // and points at the ephemeral bridge of whichever host launched it —
+    // once that host's window closed, its bridge closed with it, so the
+    // orphaned server stays healthy while every tool call fails with
+    // "Browser host bridge unreachable". Spawn our own Eve on a free port
+    // instead, wired to *this* host's live bridge.
+    const port = await findFreePort(Number(process.env.EVE_PORT ?? DEFAULT_EVE_PORT))
+    const baseUrl = `http://127.0.0.1:${port}`
+    const eveBin = join(this.opts.appRoot, 'node_modules', 'eve', 'bin', 'eve.js')
+    if (!existsSync(eveBin)) throw new Error(`Eve is not installed at ${eveBin}; run npm install`)
+    this.log(`starting Eve server on port ${port}`)
+    const child = spawn(this.opts.execPath ?? process.execPath, [eveBin, 'dev', '--no-ui', '--port', String(port)], {
+      cwd: this.opts.appRoot,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        MAGIC_TOOL_BRIDGE_URL: this.bridge.url,
+        MAGIC_TOOL_BRIDGE_TOKEN: this.bridge.token
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    this.child = child
+    child.stdout?.on('data', (d: Buffer) => this.log(`eve: ${String(d).trim()}`))
+    child.stderr?.on('data', (d: Buffer) => this.log(`eve: ${String(d).trim()}`))
+    child.once('exit', (code) => {
+      this.log(`Eve server exited (code ${code})`)
+      // A dead Eve must not poison later runs: drop the cached setup so
+      // the next run respawns Eve against this host's (still live) bridge.
+      if (this.child === child) {
+        this.child = null
+        this.runtime = null
+        this.ready = null
+      }
+    })
+    await this.waitHealthy(baseUrl, 90_000)
 
     this.runtime = this.opts.runtime ?? createAgentRuntime({ baseUrl })
     this.log(`ready (runtime=${this.runtime.id}, eve=${baseUrl}, bridge=${this.bridge.url})`)

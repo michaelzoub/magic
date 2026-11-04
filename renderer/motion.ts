@@ -29,6 +29,26 @@ export const motion = {
     gsap.fromTo(el, { opacity: 0, y: 2, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.12, ease: 'expo.out', clearProps: 'transform' })
   },
 
+  /** Collapse a removed tab's ghost slot away: hold the red slot ~1.35s, then collapse (~200ms). */
+  tabExit(el: HTMLElement) {
+    if (!ok()) return
+    gsap.fromTo(
+      el,
+      { opacity: 1, width: el.offsetWidth, flex: 'none' },
+      { opacity: 0, width: 0, paddingLeft: 0, paddingRight: 0, duration: 0.2, delay: 1.35, ease: 'power2.in' }
+    )
+  },
+
+  /** Subtle hairline pulse for the workspace row a switch just activated (~240ms). */
+  workspaceGlow(el: Element) {
+    if (!ok()) return
+    gsap.fromTo(
+      el,
+      { boxShadow: 'inset 0 0 0 1px rgb(96 165 250 / 0.5)' },
+      { boxShadow: 'inset 0 0 0 1px rgb(96 165 250 / 0)', duration: 0.24, ease: 'power2.out', clearProps: 'boxShadow' }
+    )
+  },
+
   /** Kill any tween on `el` (e.g. tabIn) so it stops fighting a drag. */
   stop(el: Element | null | undefined) {
     if (!el) return
@@ -71,6 +91,23 @@ export const motion = {
       Array.from(items).slice(0, MAX_STAGGER_ITEMS),
       { opacity: 0, y: 3 },
       { opacity: 1, y: 0, duration: 0.1, ease: 'expo.out', stagger: 0.01, clearProps: 'transform,opacity', overwrite: false }
+    )
+  },
+
+  /**
+   * Bare list entrance (no surface pop): a micro-stagger of the list's
+   * `[data-animate-item]` rows, same timing as `surfaceIn`'s cascade.
+   * Used for in-panel lists that appear while typing (chat tab matches),
+   * so rows settle in instead of snapping into place.
+   */
+  listIn(el: Element) {
+    if (!ok()) return
+    const items = el.querySelectorAll('[data-animate-item]')
+    if (items.length === 0) return
+    gsap.fromTo(
+      Array.from(items).slice(0, MAX_STAGGER_ITEMS),
+      { opacity: 0, y: 3 },
+      { opacity: 1, y: 0, duration: 0.1, ease: 'expo.out', stagger: 0.012, clearProps: 'transform,opacity', overwrite: true }
     )
   },
 

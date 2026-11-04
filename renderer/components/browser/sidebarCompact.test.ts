@@ -17,6 +17,14 @@ describe('compact sidebar', () => {
     expect(switcher).not.toContain('h-8 w-full')
   })
 
+  it('makes the whole "Your workspaces" header row open the menu, not just the +', () => {
+    const header = sidebar.slice(sidebar.indexOf('Your workspaces') - 900, sidebar.indexOf('Your workspaces'))
+    expect(header).toContain('cursor-pointer')
+    expect(header).toContain("querySelector<HTMLElement>('[data-workspace-menu]')")
+    // Workspace rows show a pointer over their full-width button too.
+    expect(switcher).toContain('relative cursor-pointer')
+  })
+
   it('keeps count badges small and subtle', () => {
     const start = switcher.indexOf('function CountBadge')
     const badge = switcher.slice(start, switcher.indexOf('/*', start))
@@ -24,6 +32,32 @@ describe('compact sidebar', () => {
     expect(badge).toContain('text-3xs')
     expect(badge).toContain('text-chrome-faint')
     expect(badge).not.toMatch(/border|ring-/)
+  })
+
+  it('has no "Workspaces" nav row — the + in the section header opens the menu', () => {
+    expect(switcher).not.toContain('aria-label="Workspaces"')
+    expect(switcher).not.toContain('<span className="truncate">Workspaces</span>')
+    // The + trigger (both the header button and the rail row) is the menu.
+    expect(switcher).toContain('data-workspace-menu')
+    expect(switcher).toContain('aria-label="New workspace"')
+    // Sidebar no longer renders a Workspaces row in the top nav, nor
+    // forwards the + click to a hidden trigger.
+    const nav = sidebar.slice(sidebar.indexOf('<nav'), sidebar.indexOf('</nav>'))
+    expect(nav).not.toContain('WorkspaceMenu')
+    expect(sidebar).not.toContain('openWorkspaceMenu')
+    expect(sidebar).toContain('<WorkspaceMenu')
+  })
+
+  it('is drag-resizable within bounds, persisted, with a keyboard-operable handle', () => {
+    const min = Number(sidebar.match(/SIDEBAR_MIN_WIDTH = (\d+)/)?.[1])
+    const max = Number(sidebar.match(/SIDEBAR_MAX_WIDTH = (\d+)/)?.[1])
+    expect(min).toBeGreaterThanOrEqual(192) // labels never render truncated
+    expect(max).toBeGreaterThan(min)
+    expect(sidebar).toContain('aria-label="Resize sidebar"')
+    expect(sidebar).toContain("role=\"separator\"")
+    expect(sidebar).toContain('cursor-col-resize')
+    expect(sidebar).toContain('localStorage')
+    expect(sidebar).toContain('ArrowRight')
   })
 
   it('carries active/selected states with background fills, not borders', () => {

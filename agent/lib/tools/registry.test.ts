@@ -125,6 +125,14 @@ describe('workspace ownership', () => {
     expect(await registry.execute('switch_workspace', { workspaceId: 'nope' }, c)).toMatchObject({ ok: false, error: { code: 'not_found' } })
   })
 
+  it('switches via the workspace directory when no store is wired, even with none active', async () => {
+    const switchTo = vi.fn(async () => {})
+    const c = { ...ctx(), workspaces: { list: async () => [{ id: 'work', name: 'Work', goal: '', active: false }], switchTo } }
+    expect(await registry.execute('switch_workspace', { workspaceId: 'work' }, c)).toMatchObject({ ok: true, data: { workspace: { id: 'work', active: true } } })
+    expect(switchTo).toHaveBeenCalledWith('work')
+    expect(await registry.execute('switch_workspace', { workspaceId: 'nope' }, c)).toMatchObject({ ok: false, error: { code: 'not_found' } })
+  })
+
   it('reports unavailable when workspaces are not wired', async () => {
     expect(await registry.execute('list_workspaces', {}, ctx())).toMatchObject({ ok: false, error: { code: 'unavailable' } })
   })

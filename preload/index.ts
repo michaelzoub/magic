@@ -132,6 +132,12 @@ const agent: EmbeddedAgent = {
       if (onEvent) ipcRenderer.removeListener(AGENT_IPC.askEvent, listener)
     })
   },
+  onTabClosing: (listener) => {
+    const handler = (_: unknown, tabId: string) => listener(tabId)
+    ipcRenderer.on(AGENT_IPC.tabClosing, handler)
+    return () => ipcRenderer.removeListener(AGENT_IPC.tabClosing, handler)
+  },
+  assessDrift: (request) => ipcRenderer.invoke(AGENT_IPC.assessDrift, request),
   getAssistance: () => ipcRenderer.invoke(AGENT_IPC.getAssistance),
   setAssistanceActive: (active) => ipcRenderer.invoke(AGENT_IPC.setAssistanceActive, active),
   setAssistanceExclusions: (excludedSites, excludedWorkspaceIds) =>

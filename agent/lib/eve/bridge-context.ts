@@ -7,12 +7,12 @@
  */
 import type { BrowserEngine } from '@shared/engine'
 import { ToolError, type ToolErrorCode } from '../tools/types'
-import type { PageDriver, ToolContext } from '../tools/ports'
+import type { PageDriver, ToolContext, WorkspaceDirectory } from '../tools/ports'
 
 const ERROR_CODES: ReadonlySet<string> = new Set(['invalid_input', 'not_found', 'forbidden', 'unavailable', 'failed'])
 
 export function createBridgeToolContext(baseUrl: string, token?: string): ToolContext {
-  const call = async <T>(target: 'browser' | 'page', method: string, args: unknown[]): Promise<T> => {
+  const call = async <T>(target: 'browser' | 'page' | 'workspaces', method: string, args: unknown[]): Promise<T> => {
     let res: Response
     try {
       res = await fetch(`${baseUrl.replace(/\/$/, '')}/call`, {
@@ -62,6 +62,11 @@ export function createBridgeToolContext(baseUrl: string, token?: string): ToolCo
   }
 
   // No `store`: BrowserStore is synchronous and lives with the renderer/
-  // switchboard, so workspace-ownership tools report `unavailable` here.
-  return { browser, page }
+  // switchboard, so tab-ownership checks are skipped here. Workspace tools
+  // go through the host's async directory instead.
+  const workspaces: WorkspaceDirectory = {
+    list: () => call('workspaces', 'list', []),
+    switchTo: (id) => call('workspaces', 'switchTo', [id])
+  }
+  return { browser, page, workspaces }
 }

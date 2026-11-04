@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Checkpoint, CheckpointId } from '@core/memory'
-import { ArrowUp, ArrowUpRight, Bookmark, ChevronDown, Layers, Search, Tabs } from '../ui/icons'
+import { ArrowUpRight, Bookmark, ChevronDown, Globe, Layers, Search, Tabs } from '../ui/icons'
 import { Button, Chip, Dialog, type ChipVariant } from '../ui'
 import { workspaceIcon } from '@/hooks/useWorkspaces'
 import { checkpointIcons, timeAgo, type MemoryWorkspaceRef, type TimeAgoTone } from './memoryCard'
@@ -31,13 +31,14 @@ function dayLabel(ts: number): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
-/** "Blueprint, portfolio references + 2 more tabs" from the saved tab titles. */
-function tabSummary(checkpoint: Checkpoint): string {
-  const titles = checkpoint.before.tabs.map((t) => t.title).filter(Boolean)
-  if (titles.length === 0) return 'No tabs saved'
-  const head = titles.slice(0, 2).join(', ')
-  const rest = titles.length - 2
-  return rest > 0 ? `${head} + ${rest} more tab${rest === 1 ? '' : 's'}` : head
+const MAX_TAB_CHIPS = 3
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
 }
 
 function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavigate }: {
@@ -53,33 +54,61 @@ function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavi
   const { beforeIcon, afterIcon } = checkpointIcons(checkpoint, workspaces)
   const BeforeIcon = beforeIcon ? workspaceIcon(beforeIcon) : Layers
   const AfterIcon = afterIcon ? workspaceIcon(afterIcon) : Layers
+  const shownTabs = checkpoint.before.tabs.slice(0, MAX_TAB_CHIPS)
+  const extraTabs = checkpoint.before.tabs.length - shownTabs.length
   return (
-    <li data-animate-item className="flex items-center gap-2 rounded-[6px] px-2 py-2 transition-colors hover:bg-white/[0.04]">
+    <li data-animate-item className="flex items-center gap-3 rounded-[8px] bg-black/25 px-3 py-3 transition-colors hover:bg-black/35">
       {/* Leading tile for the saved (Before) workspace, so cards scan by icon
-          as well as by name; the destination keeps its own glyph inline below. */}
+          as well as by name; the destination keeps its own glyph in the pill. */}
       <span
         aria-hidden="true"
         title={checkpoint.before.title}
-        className="grid h-7 w-7 shrink-0 place-items-center self-start rounded-[6px] bg-white/[0.06] text-white/70 [&_svg]:size-3.5"
+        className="grid h-9 w-9 shrink-0 place-items-center self-start rounded-[8px] bg-white/[0.06] text-white/70 [&_svg]:size-4"
       >
-        <BeforeIcon width={16} height={16} />
+        <BeforeIcon width={18} height={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-medium text-white" title={checkpoint.before.title}>
+        <div className="truncate text-sm font-semibold text-white" title={checkpoint.before.title}>
           {checkpoint.before.title}
         </div>
-        {/* Origin indicator directly under the headline: the other workspace,
-            with an arrow pointing up to the headline it switched into. */}
-        <div className="mt-0.5 flex items-center gap-1 truncate text-2xs text-white/40">
-          <ArrowUp aria-hidden="true" width={12} height={12} className="shrink-0 text-white/35" />
-          <AfterIcon aria-hidden="true" width={12} height={12} className="shrink-0 text-white/35" />
-          <span className="sr-only">Switched from </span>
-          <span className="truncate" title={checkpoint.after.title}>{checkpoint.after.title}</span>
+        {/* Switch pill directly under the headline: where this moment came
+            from (muted) and the focus mode it switched into (emphasised). */}
+        <div className="mt-1.5 flex">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-[6px] bg-emerald-400/15 px-2 py-1 text-xs text-emerald-100/80">
+            <AfterIcon aria-hidden="true" width={12} height={12} className="shrink-0 text-emerald-200/70" />
+            <span className="shrink-0">Switched from</span>
+            <span className="truncate text-white/45" title={checkpoint.before.title}>{checkpoint.before.title}</span>
+            <span className="shrink-0">to</span>
+            <span className="truncate font-semibold text-white" title={checkpoint.after.title}>{checkpoint.after.title}</span>
+          </span>
         </div>
-        <div className="mt-0.5 truncate text-2xs text-white/40" title={tabSummary(checkpoint)}>
-          {tabSummary(checkpoint)}
-        </div>
-        <div className="mt-1 flex items-center gap-1.5 text-2xs text-white/40">
+        {/* Saved tabs as browser-tab chips, matching the active tab in the
+            browser chrome: plain white-ish fill (no neon tint) in a simple
+            rounded rectangle — no slanted/sharp edge. */}
+        {shownTabs.length > 0 ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {shownTabs.map((t) => (
+              <span
+                key={t.id}
+                title={t.title || t.url}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-[6px] bg-white/[0.16] px-2 py-1 text-xs text-white"
+              >
+                {t.favicon ? (
+                  <img src={t.favicon} alt="" draggable={false} className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+                ) : (
+                  <Globe aria-hidden="true" width={14} height={14} className="shrink-0 text-white/60" />
+                )}
+                <span className="truncate">{t.title || hostOf(t.url)}</span>
+              </span>
+            ))}
+            {extraTabs > 0 && (
+              <span className="text-2xs text-white/40">+ {extraTabs} more tab{extraTabs === 1 ? '' : 's'}</span>
+            )}
+          </div>
+        ) : (
+          <div className="mt-1.5 text-2xs text-white/40">No tabs saved</div>
+        )}
+        <div className="mt-1.5 flex items-center gap-1.5 text-2xs text-white/40">
           {/* Relative time as a status chip; the exact time stays as its tooltip. */}
           <Chip variant={toneVariant[ago.tone]}>
             <time dateTime={new Date(checkpoint.createdAt).toISOString()} title={new Date(checkpoint.createdAt).toLocaleString()}>
@@ -238,7 +267,7 @@ export function MemoryDialog({ open, checkpoints, workspaces: workspaceRefs = []
           groups.map((g) => (
             <section key={g.label} aria-label={g.label}>
               <h3 className="px-2 pb-1 pt-4 text-2xs font-medium text-white/40">{g.label}</h3>
-              <ul className="flex flex-col gap-1">
+              <ul className="flex flex-col gap-2">
                 {g.items.map((c) => (
                   <CheckpointRow
                     key={c.id}
