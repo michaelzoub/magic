@@ -32,7 +32,7 @@ import type {
 /** Empty state, or `init` normalized so the transition map mirrors the checkpoints. */
 export function createMemoryState(init: Partial<MemoryState> = {}): MemoryState {
   const seen = new Set<string>()
-  const checkpoints = (init.checkpoints ?? []).filter((c) => {
+  const checkpoints = (init.checkpoints ?? []).map((c) => ({ ...c, meaningful: c.meaningful ?? false })).filter((c) => {
     if (seen.has(c.id) || seen.has(c.before.id)) return false
     seen.add(c.id)
     seen.add(c.before.id)
@@ -140,7 +140,14 @@ export function recordReorg(
     workspaceId: input.after.workspaceId
   }
 
-  const checkpoint: Checkpoint = { id: checkpointId, before, after, createdAt }
+  const checkpoint: Checkpoint = {
+    id: checkpointId,
+    before,
+    after,
+    createdAt,
+    meaningful: input.meaningful ?? false,
+    meaningfulReason: input.meaningfulReason ?? null
+  }
   const next: MemoryState = {
     checkpoints: [...state.checkpoints, checkpoint],
     transitions: new Map(state.transitions).set(before.id, after.workspaceId),
@@ -185,6 +192,26 @@ export function restoreCheckpoint(
 /** Fetch the focus mode a Before landed in, via the saved id→id map. */
 export function getTransitionTarget(state: MemoryState, beforeId: string): string | null {
   return state.transitions.get(beforeId) ?? null
+}
+
+/**
+ * Apply the agent's verdict to a saved checkpoint. The checkpoint stays in
+ * the full history either way; `meaningful` only controls whether it is
+ * shown to the user.
+ */
+export function setCheckpointMeaning(
+  state: MemoryState,
+  checkpointId: CheckpointId,
+  meaningful: boolean,
+  reason?: string | null
+): MemoryState {
+  if (!state.checkpoints.some((c) => c.id === checkpointId)) throw new Error(`No checkpoint with id ${checkpointId}`)
+  return {
+    ...state,
+    checkpoints: state.checkpoints.map((c) =>
+      c.id === checkpointId ? { ...c, meaningful, meaningfulReason: reason ?? null } : c
+    )
+  }
 }
 
 export function getCheckpoint(state: MemoryState, checkpointId: CheckpointId): Checkpoint | null {

@@ -171,6 +171,31 @@ describe('WorkspaceSwitchboard.remove — deleting workspaces', () => {
   })
 })
 
+describe('WorkspaceSwitchboard.deactivate — quitting to non-set', () => {
+  const tab = (id: string) => ({ id, title: id, url: `https://${id}.example/` })
+
+  it('saves live tabs, clears the active workspace, and keeps it listed', () => {
+    const board = seed()
+    board.switchTo('work')
+    expect(board.deactivate({ tabs: [tab('w-live')], activeTabId: 'w-live' })).toBe('work')
+    expect(board.activeId).toBeNull()
+    expect(board.getActive()).toBeNull()
+    expect(board.listedIds).toEqual(['work'])
+    expect(board.getTabSet('work')).toEqual({ tabs: [tab('w-live')], activeTabId: 'w-live' })
+    // Switching back restores exactly the tabs saved at quit time.
+    expect(board.switchTo('work').replaceTabs.tabs).toEqual([tab('w-live')])
+  })
+
+  it('is a no-op (and does not notify) when no workspace is active', () => {
+    const board = seed()
+    const seen = vi.fn()
+    board.subscribe(seen)
+    expect(board.deactivate()).toBeNull()
+    expect(board.activeId).toBeNull()
+    expect(seen).not.toHaveBeenCalled()
+  })
+})
+
 describe('WorkspaceSwitchboard creation / external switches', () => {
   it('addAndSwitch registers, lists, and activates the new workspace', () => {
     const board = seed()

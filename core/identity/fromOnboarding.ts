@@ -67,7 +67,7 @@ export function identityPartEntriesFromOnboarding(data: Readonly<OnboardingData>
     { id: 'name', label: 'Your name', part: `name:${name.trim()}`, summary: name.trim() },
     { id: 'description', label: 'Your description', part: `description:${description.trim()}`, summary: description.trim() },
     { id: 'areas', label: 'Areas you picked', part: `areas:${areaList.join(',')}`, summary: areaList.join(', ') },
-    { id: 'goals', label: 'Goals you set', part: `goals:${goalList.join(',')}`, summary: goalList.join(' · ') },
+    { id: 'goals', label: 'Goals you set', part: `goals:${goalList.join(',')}`, summary: goalList.join(', ') },
     { id: 'sites', label: 'Example sites', part: `sites:${siteList.join(',')}`, summary: siteList.join(', ') }
   ]
 }

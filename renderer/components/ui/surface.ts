@@ -9,4 +9,4 @@
  * their own floating UI. Checked by `surface.test.ts`.
  */
 export const surface =
-  'bg-neutral-800 text-white shadow-[0_4px_16px_rgb(0_0_0/0.35),0_0_0_0.5px_rgb(255_255_255/0.08)]'
+  'bg-neutral-800 text-white shadow-[0_4px_16px_rgb(0_0_0/0.35)]'

@@ -4,6 +4,7 @@
  * any future `AgentRuntime` unchanged.
  */
 import type { AgentTabInfo, WorkspaceSwitchNotice } from '@shared/agent'
+import { checkpointVerdictInstruction } from './verdict'
 
 const MAX_TABS_LISTED = 20
 
@@ -28,11 +29,15 @@ export function buildWorkspaceSwitchPrompt(notice: WorkspaceSwitchNotice): strin
     tabList('Tabs left behind in the previous workspace', notice.outgoingTabs),
     tabList('Tabs now open in the new workspace', notice.incomingTabs),
     '',
-    'Your job: set up the new workspace for its goal, using your browser tools. Be quick and decisive: you are cut off after 15 seconds, so prefer few, high-value actions over exhaustive checks.',
+    'Your job: propose how to set up the new workspace for its goal, using your browser tools. Be quick and decisive: you are cut off after 15 seconds, so prefer few, high-value actions over exhaustive checks.',
+    '- Your `open_tab` / `close_tab` / `navigate` calls do NOT take effect immediately: they are recorded as proposals, and the user is asked afterwards whether to apply them. Call them exactly as if they were real so the proposals are concrete.',
     '- First call `list_tabs` to see the live state; do not trust the lists above over the live state.',
-    '- Keep tabs that serve the new workspace goal. Close tabs that clearly do not (blank/new-tab pages, duplicates, leftovers from the previous workspace), and open at most a few tabs that directly help start the goal.',
+    '- Keep tabs that serve the new workspace goal. Propose closing tabs that clearly do not (blank/new-tab pages, duplicates, leftovers from the previous workspace), and propose opening at most a few tabs that directly help start the goal.',
     '- Do not switch workspaces yourself, and do not undo the user\'s switch.',
-    '- If the open tabs already fit the goal, do nothing and say so.',
-    'Finish with one short summary of what you changed (opened/closed) and why, or that no changes were needed.'
+    '- If the open tabs already fit the goal, propose nothing and say so.',
+    '- Never ask the user a question — no clarifying, confirmation, or follow-up questions. Decide and propose the changes yourself.',
+    'Finish with one short summary of the changes you propose (open/close) and why, or that no changes are needed.',
+    '',
+    checkpointVerdictInstruction('switch')
   ].join('\n')
 }

@@ -54,6 +54,14 @@ export interface UpdateProfileInput {
   displayName: string
   /** The one-sentence description shown under the name (stored as the `description` setting). */
   description: string
+  /**
+   * Focus areas with their goals (stored as the `goals` setting; the first
+   * non-empty goal also becomes the profile goal). Omitted = leave unchanged.
+   * Plain goal text: example sites live in `sites`, not concatenated in.
+   */
+  goals?: { name: string; goal: string }[]
+  /** Example sites per focus area (stored as the `sites` setting). Omitted = leave unchanged. */
+  sites?: Record<string, string[]>
 }
 
 export interface OnboardingPersistence {
@@ -62,9 +70,10 @@ export interface OnboardingPersistence {
   /** Stored profile + settings, or null when onboarding never completed. */
   loadOnboarding(): Promise<CompletedOnboarding | null>
   /**
-   * Update the existing singleton profile in place (display name +
-   * description only); returns what was stored. The identity seed and all
-   * other profile fields, settings, and onboarding data are preserved.
+   * Update the existing singleton profile in place (display name,
+   * description, and — when provided — goals/sites); returns what was
+   * stored. The identity seed, the canonical identity inputs behind the
+   * totem, and all other profile fields/settings are preserved.
    */
   updateProfile(input: UpdateProfileInput): Promise<CompletedOnboarding>
 }

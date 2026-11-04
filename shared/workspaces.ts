@@ -75,6 +75,8 @@ export interface WorkspacePersistence {
   /** Append a before → after switch and make the target active + listed. */
   recordSwitch(input: RecordSwitchInput): Promise<void>
   saveTabSet(workspaceId: string, tabSet: PersistedTabSet): Promise<void>
+  /** Quit the active workspace: clear the stored active id so no workspace is set on next launch either. */
+  clearActiveWorkspace(): Promise<void>
   listSwitches(limit?: number): Promise<WorkspaceSwitchRecord[]>
 }
 
@@ -84,5 +86,6 @@ export const WORKSPACE_IPC = {
   delete: 'workspaces:delete',
   recordSwitch: 'workspaces:record-switch',
   saveTabSet: 'workspaces:save-tab-set',
+  clearActive: 'workspaces:clear-active',
   listSwitches: 'workspaces:list-switches'
 } as const

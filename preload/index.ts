@@ -53,7 +53,10 @@ const overlay: ShellOverlay = {
     return () => {
       if (actionHandler === handler) actionHandler = null
     }
-  }
+  },
+  pushMagicAgentEvent: (streamId, event) => ipcRenderer.send(OVERLAY_IPC.agentEvent, streamId, event),
+  showAgentNotice: (notice) => ipcRenderer.send(OVERLAY_IPC.agentNotice, notice),
+  showDriftNotice: (notice) => ipcRenderer.send(OVERLAY_IPC.driftNotice, notice)
 }
 
 const overlayHost: OverlayHost = {
@@ -63,6 +66,21 @@ const overlayHost: OverlayHost = {
     return () => ipcRenderer.removeListener(OVERLAY_IPC.surface, listener)
   },
   requestAction: (action) => ipcRenderer.invoke(OVERLAY_IPC.action, action),
+  onAgentEvent: (handler) => {
+    const listener = (_: unknown, streamId: string, event: Parameters<typeof handler>[1]) => handler(streamId, event)
+    ipcRenderer.on(OVERLAY_IPC.agentEvent, listener)
+    return () => ipcRenderer.removeListener(OVERLAY_IPC.agentEvent, listener)
+  },
+  onAgentNotice: (handler) => {
+    const listener = (_: unknown, notice: Parameters<typeof handler>[0]) => handler(notice)
+    ipcRenderer.on(OVERLAY_IPC.agentNotice, listener)
+    return () => ipcRenderer.removeListener(OVERLAY_IPC.agentNotice, listener)
+  },
+  onDriftNotice: (handler) => {
+    const listener = (_: unknown, notice: Parameters<typeof handler>[0]) => handler(notice)
+    ipcRenderer.on(OVERLAY_IPC.driftNotice, listener)
+    return () => ipcRenderer.removeListener(OVERLAY_IPC.driftNotice, listener)
+  },
   dismiss: (kind) => {
     console.log('[overlay-host] dismiss', kind, new Error().stack?.split('\n').slice(2, 6).join(' | '))
     ipcRenderer.send(OVERLAY_IPC.dismiss, kind)
@@ -81,6 +99,7 @@ const workspaces: WorkspacePersistence = {
   deleteWorkspace: (workspaceId) => ipcRenderer.invoke(WORKSPACE_IPC.delete, workspaceId),
   recordSwitch: (input) => ipcRenderer.invoke(WORKSPACE_IPC.recordSwitch, input),
   saveTabSet: (workspaceId, tabSet) => ipcRenderer.invoke(WORKSPACE_IPC.saveTabSet, workspaceId, tabSet),
+  clearActiveWorkspace: () => ipcRenderer.invoke(WORKSPACE_IPC.clearActive),
   listSwitches: (limit) => ipcRenderer.invoke(WORKSPACE_IPC.listSwitches, limit)
 }
 
@@ -91,7 +110,33 @@ const onboarding: OnboardingPersistence = {
 }
 
 const agent: EmbeddedAgent = {
-  workspaceSwitched: (notice) => ipcRenderer.invoke(AGENT_IPC.workspaceSwitched, notice)
+  workspaceSwitched: (notice, onEvent) => {
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    const listener = (_: unknown, id: string, event: Parameters<NonNullable<typeof onEvent>>[0]) => {
+      if (id === requestId) onEvent?.(event)
+    }
+    if (onEvent) ipcRenderer.on(AGENT_IPC.workspaceSwitchedEvent, listener)
+    return ipcRenderer.invoke(AGENT_IPC.workspaceSwitched, notice, requestId).finally(() => {
+      if (onEvent) ipcRenderer.removeListener(AGENT_IPC.workspaceSwitchedEvent, listener)
+    })
+  },
+  ask: (question, context, onEvent) => {
+    // Stream events come back on a side channel tagged with this request id
+    // (invoke() alone is request/response and cannot stream).
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    const listener = (_: unknown, id: string, event: Parameters<NonNullable<typeof onEvent>>[0]) => {
+      if (id === requestId) onEvent?.(event)
+    }
+    if (onEvent) ipcRenderer.on(AGENT_IPC.askEvent, listener)
+    return ipcRenderer.invoke(AGENT_IPC.ask, question, context, requestId).finally(() => {
+      if (onEvent) ipcRenderer.removeListener(AGENT_IPC.askEvent, listener)
+    })
+  },
+  getAssistance: () => ipcRenderer.invoke(AGENT_IPC.getAssistance),
+  setAssistanceActive: (active) => ipcRenderer.invoke(AGENT_IPC.setAssistanceActive, active),
+  setAssistanceExclusions: (excludedSites, excludedWorkspaceIds) =>
+    ipcRenderer.invoke(AGENT_IPC.setAssistanceExclusions, excludedSites, excludedWorkspaceIds),
+  listAssistanceActivity: (limit) => ipcRenderer.invoke(AGENT_IPC.listAssistanceActivity, limit)
 }
 
 contextBridge.exposeInMainWorld('agent', agent)

@@ -15,8 +15,8 @@ type State = UseWorkspaces
  * never add state-dependent padding/justification: `open` only controls
  * whether the label after the slot renders, so no icon ever moves.
  */
-export const sidebarRow = `no-drag flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 text-sm transition-colors duration-100
-  hover:bg-chrome-hover/[0.05] hover:text-chrome-text active:bg-chrome-hover/[0.08]`
+export const sidebarRow = `no-drag flex h-7 w-full items-center gap-1.5 overflow-hidden rounded-[6px] px-2 text-xs transition-colors duration-100 [&_svg]:size-3.5
+  hover:bg-chrome-hover/[0.06] hover:text-chrome-text active:bg-chrome-hover/[0.10]`
 
 const row = sidebarRow
 
@@ -27,14 +27,15 @@ export function IconSlot({ children }: { children: ReactNode }) {
 
 /**
  * Trailing element count for a side-panel row: the plain number (no
- * leading zero) on a boxed background, so it reads as an amount badge
- * rather than part of the label. `min-w` keeps single digits a tidy
- * box while wider counts grow with padding; the inset ring keeps the
- * box visible on rows that already carry a hover/active background.
+ * leading zero) on a faint tinted background, so it reads as an amount
+ * badge rather than part of the label — small (16px) and subtle
+ * (`chrome-faint` on a 5% fill), never competing with the row label.
+ * `min-w` keeps single digits a tidy box while wider counts grow with
+ * padding.
  */
 export function CountBadge({ count }: { count: number }) {
   return (
-    <span className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-md bg-chrome-hover/[0.07] px-1.5 text-[11px] font-medium leading-none tabular-nums text-chrome-muted ring-1 ring-inset ring-chrome-border/[0.09]">
+    <span className="ml-auto inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[4px] bg-chrome-hover/[0.05] px-1 text-3xs font-medium leading-none tabular-nums text-chrome-faint">
       {count}
     </span>
   )
@@ -79,7 +80,7 @@ export function WorkspaceMenuContent({ workspaces, activeId, onSelect, onCreate,
               aria-label={`Delete workspace ${w.name}`}
               title={`Delete ${w.name}`}
               onClick={(e) => (e.stopPropagation(), onDelete(w.id))}
-              className={`absolute top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-[4px] text-white/45 opacity-0 transition-opacity duration-75 hover:bg-white/[0.1] hover:text-red-300 focus-visible:opacity-100 group-hover/ws:opacity-100 ${w.id === activeId ? 'right-6' : 'right-1'}`}
+              className={`absolute top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-[6px] text-white/45 opacity-0 transition-opacity duration-75 hover:bg-white/[0.1] hover:text-red-300 focus-visible:opacity-100 group-hover/ws:opacity-100 ${w.id === activeId ? 'right-6' : 'right-1'}`}
             >
               <Trash width={13} height={13} />
             </button>
@@ -109,8 +110,8 @@ export function WorkspaceMenuContent({ workspaces, activeId, onSelect, onCreate,
               if (e.key === 'Enter') submit()
               if (e.key === 'Escape') (e.stopPropagation(), setDraft(null), setError(null))
             }}
-            className={`h-7 w-full rounded-[5px] bg-white/[0.06] px-2 text-white outline-none placeholder:text-white/35
-              ring-1 ${error ? 'ring-red-400/70' : 'ring-white/[0.08] focus:ring-brand/70'}`}
+            className={`h-7 w-full rounded-[6px] bg-white/[0.06] px-2 text-white outline-none placeholder:text-white/35
+              focus:ring-1 focus:ring-brand/70 ${error ? 'ring-1 ring-red-400/70' : ''}`}
           />
           <textarea
             value={draft.goal}
@@ -122,10 +123,10 @@ export function WorkspaceMenuContent({ workspaces, activeId, onSelect, onCreate,
               if (e.key === 'Enter' && !e.shiftKey) (e.preventDefault(), submit())
               if (e.key === 'Escape') (e.stopPropagation(), setDraft(null), setError(null))
             }}
-            className="min-h-11 w-full resize-none rounded-[5px] bg-white/[0.06] px-2 py-1.5 leading-5 text-white outline-none placeholder:text-white/35
-              ring-1 ring-white/[0.08] focus:ring-brand/70"
+            className="w-full resize-none rounded-[6px] bg-white/[0.06] px-2 py-1.5 leading-5 text-white outline-none placeholder:text-white/35
+              focus:ring-1 focus:ring-brand/70"
           />
-          {error && <div className="px-1 pt-0.5 text-[11px] text-red-300">{error}</div>}
+          {error && <div className="px-1 pt-0.5 text-2xs text-red-300">{error}</div>}
         </div>
       )}
     </>
@@ -187,7 +188,7 @@ export function WorkspaceMenu({ open: expanded, menuOpen: menu, onMenuOpenChange
       aria-haspopup="menu"
       aria-expanded={menu}
       onClick={(e) => (motion.press(e.currentTarget), menu ? close() : openMenu(e.currentTarget))}
-      className={`${row} ${menu ? 'bg-chrome-hover/[0.055] font-medium text-chrome-text' : 'text-chrome-muted'}`}
+      className={`${row} ${menu ? 'bg-chrome-hover/[0.10] font-medium text-chrome-text' : 'text-chrome-muted'}`}
     >
       <IconSlot><Workspaces /></IconSlot>
       {expanded && <span className="truncate">Workspaces</span>}
@@ -238,7 +239,7 @@ export function WorkspaceList({ open: expanded, overviewOpen = false, ws, onSele
             aria-label={w.name}
             aria-current={active || undefined}
             onClick={(e) => (motion.press(e.currentTarget), onSelect(w.id))}
-            className={`${row} relative ${active && !demoted ? 'bg-chrome-hover/[0.055] font-medium text-chrome-text' : 'text-chrome-muted'}`}
+            className={`${row} relative ${active && !demoted ? 'bg-chrome-hover/[0.10] font-medium text-chrome-text' : 'text-chrome-muted'}`}
           >
             <IconSlot><w.Icon /></IconSlot>
             {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}

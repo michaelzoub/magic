@@ -8,6 +8,10 @@
  * `createAgentRuntime()` at it — no call-site changes.
  */
 
+import type { AgentStreamEvent } from '@shared/agent'
+
+export type { AgentStreamEvent }
+
 export interface AgentTurnResult {
   sessionId: string
   /** Final reply text, or null when the turn produced none (e.g. paused). */
@@ -24,4 +28,13 @@ export interface AgentRuntime {
    * should also cancel the underlying turn where they can.
    */
   send(message: string, opts?: { sessionId?: string; signal?: AbortSignal }): Promise<AgentTurnResult>
+  /**
+   * Optional streaming twin of `send`: same turn, but `onEvent` receives
+   * reply text deltas and tool-call activity live as the runtime produces
+   * them. Runtimes without streaming omit it; callers fall back to `send`.
+   */
+  sendStream?(
+    message: string,
+    opts: { sessionId?: string; signal?: AbortSignal; onEvent: (event: AgentStreamEvent) => void }
+  ): Promise<AgentTurnResult>
 }

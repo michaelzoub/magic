@@ -70,6 +70,14 @@ export interface Checkpoint {
   before: BeforeSnapshot
   after: AfterSnapshot
   createdAt: number
+  /**
+   * The agent's verdict on whether this checkpoint is worth showing the
+   * user. Everything is saved; only `meaningful` checkpoints are listed.
+   * False until the agent judges the moment (see `setCheckpointMeaning`).
+   */
+  meaningful: boolean
+  /** The agent's one-line reason for its verdict, when it gave one. */
+  meaningfulReason?: string | null
 }
 
 export interface MemoryState {
@@ -94,6 +102,9 @@ export interface RecordReorgInput {
     tabs: SavedTab[]
     activeTabId?: TabId | null
   }
+  /** Agent verdict at record time, when already known; defaults to unjudged (false). */
+  meaningful?: boolean
+  meaningfulReason?: string | null
   /** Injectable for tests; defaults to fresh random ids / `Date.now()`. */
   checkpointId?: CheckpointId
   beforeId?: SnapshotId

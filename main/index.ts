@@ -10,8 +10,8 @@ import { TooltipOverlay } from './browser/tooltip-overlay'
 import { FloatingOverlay } from './browser/floating-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
 import { ONBOARDING_IPC, type CompleteOnboardingInput, type UpdateProfileInput } from '@shared/onboarding'
-import { AGENT_IPC, type WorkspaceSwitchNotice } from '@shared/agent'
-import { EmbeddedAgentHost } from './agent/host'
+import { AGENT_IPC, DEFAULT_ASSISTANCE, type AgentChatContext, type AssistanceSettings, type WorkspaceSwitchNotice } from '@shared/agent'
+import { BackgroundAssistance, EmbeddedAgentHost } from './agent/host'
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -25,6 +25,45 @@ const overlays = new Map<number, FloatingOverlay>()
 const pendingActions = new Map<string, { resolve(v: unknown): void; reject(e: Error): void }>()
 let actionSeq = 0
 const agentHosts = new Map<number, EmbeddedAgentHost>()
+
+// Workspace persistence: one SQLite database per user profile. Created lazily
+// so handlers stay safe before `app.whenReady`.
+let workspaceDb: SqliteWorkspaceStore | null = null
+const workspaces = (): SqliteWorkspaceStore =>
+  (workspaceDb ??= new SqliteWorkspaceStore(join(app.getPath('userData'), 'magic.sqlite')))
+
+/**
+ * The one global background-assistance state: shared by every window's
+ * agent host, persisted as an app setting, and consulted before the agent
+ * may restructure anything. Off never affects ordinary session restoration.
+ */
+let assistanceState: BackgroundAssistance | null = null
+const assistance = (): BackgroundAssistance => {
+  if (assistanceState) return assistanceState
+  let initial = DEFAULT_ASSISTANCE
+  try {
+    const saved = workspaces().getSetting('backgroundAssistance') as Partial<AssistanceSettings> | undefined
+    if (saved && typeof saved.active === 'boolean') {
+      initial = {
+        active: saved.active,
+        excludedSites: Array.isArray(saved.excludedSites) ? saved.excludedSites.filter((s): s is string => typeof s === 'string') : [],
+        excludedWorkspaceIds: Array.isArray(saved.excludedWorkspaceIds)
+          ? saved.excludedWorkspaceIds.filter((s): s is string => typeof s === 'string')
+          : []
+      }
+    }
+  } catch {
+    // Unreadable settings: fall back to the default rather than blocking startup.
+  }
+  assistanceState = new BackgroundAssistance(initial, (settings) => {
+    try {
+      workspaces().setSetting('backgroundAssistance', settings)
+    } catch {
+      // Persistence is best-effort; the in-process state still applies.
+    }
+  })
+  return assistanceState
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -54,7 +93,7 @@ function createWindow(): void {
   const engine = new ElectronEngine(win)
   const wcId = win.webContents.id
   engines.set(wcId, engine)
-  agentHosts.set(wcId, new EmbeddedAgentHost({ appRoot: app.getAppPath(), engine, log: (m) => console.log(m) }))
+  agentHosts.set(wcId, new EmbeddedAgentHost({ appRoot: app.getAppPath(), engine, log: (m) => console.log(m), assistanceState: assistance() }))
   tooltips.set(wcId, new TooltipOverlay(win))
   const overlay = new FloatingOverlay(win)
   overlays.set(wcId, overlay)
@@ -102,26 +141,45 @@ ipcMain.handle(IPC.invoke, (e, command: EngineCommand, ...args: unknown[]) => {
   return (engine[command] as (...a: unknown[]) => unknown)(...args)
 })
 
-// Workspace persistence: one SQLite database per user profile. Created lazily
-// so handlers stay safe before `app.whenReady`.
-let workspaceDb: SqliteWorkspaceStore | null = null
-const workspaces = (): SqliteWorkspaceStore =>
-  (workspaceDb ??= new SqliteWorkspaceStore(join(app.getPath('userData'), 'magic.sqlite')))
-
 ipcMain.handle(WORKSPACE_IPC.load, () => workspaces().loadSnapshot())
 ipcMain.handle(WORKSPACE_IPC.upsert, (_e, record: Parameters<SqliteWorkspaceStore['upsertWorkspace']>[0]) => workspaces().upsertWorkspace(record))
 ipcMain.handle(WORKSPACE_IPC.delete, (_e, workspaceId: string) => workspaces().deleteWorkspace(workspaceId))
 ipcMain.handle(WORKSPACE_IPC.recordSwitch, (_e, input: RecordSwitchInput) => workspaces().recordSwitch(input))
 ipcMain.handle(WORKSPACE_IPC.saveTabSet, (_e, workspaceId: string, tabSet: PersistedTabSet) => workspaces().saveTabSet(workspaceId, tabSet))
 ipcMain.handle(WORKSPACE_IPC.listSwitches, (_e, limit?: number) => workspaces().listSwitches(limit))
+ipcMain.handle(WORKSPACE_IPC.clearActive, () => workspaces().clearActiveWorkspace())
 
 // Embedded agent: a workspace switch runs the agent against the new
 // workspace (see main/agent/host.ts). Fails soft — never blocks switching.
-ipcMain.handle(AGENT_IPC.workspaceSwitched, (e, notice: WorkspaceSwitchNotice) => {
+ipcMain.handle(AGENT_IPC.workspaceSwitched, (e, notice: WorkspaceSwitchNotice, requestId?: string) => {
   const host = agentHosts.get(e.sender.id)
   if (!host) return { status: 'skipped', reply: null, reason: 'No agent host for this window' }
-  return host.workspaceSwitched(notice)
+  const sender = e.sender
+  return host.workspaceSwitched(notice, (event) => {
+    if (requestId && !sender.isDestroyed()) sender.send(AGENT_IPC.workspaceSwitchedEvent, requestId, event)
+  })
 })
+ipcMain.handle(AGENT_IPC.ask, (e, question: string, context: AgentChatContext, requestId?: string) => {
+  const host = agentHosts.get(e.sender.id)
+  if (!host) return { status: 'skipped', reply: null, reason: 'No agent host for this window' }
+  const safeContext: AgentChatContext = {
+    workspace: context?.workspace ?? null,
+    tabs: Array.isArray(context?.tabs) ? context.tabs.map((t) => ({ title: String(t?.title ?? ''), url: String(t?.url ?? '') })) : []
+  }
+  const sender = e.sender
+  return host.ask(String(question ?? ''), safeContext, (event) => {
+    if (requestId && !sender.isDestroyed()) sender.send(AGENT_IPC.askEvent, requestId, event)
+  })
+})
+ipcMain.handle(AGENT_IPC.getAssistance, () => assistance().get())
+ipcMain.handle(AGENT_IPC.setAssistanceActive, (_e, active: boolean) => assistance().setActive(Boolean(active)))
+ipcMain.handle(AGENT_IPC.setAssistanceExclusions, (_e, excludedSites: string[], excludedWorkspaceIds: string[]) =>
+  assistance().setExclusions(
+    (Array.isArray(excludedSites) ? excludedSites : []).map((s) => String(s).trim().toLowerCase()).filter(Boolean),
+    (Array.isArray(excludedWorkspaceIds) ? excludedWorkspaceIds : []).map(String)
+  )
+)
+ipcMain.handle(AGENT_IPC.listAssistanceActivity, (e, limit?: number) => agentHosts.get(e.sender.id)?.listAssistanceActivity(limit) ?? [])
 
 ipcMain.handle(ONBOARDING_IPC.complete, (_e, input: CompleteOnboardingInput) => workspaces().completeOnboarding(input))
 ipcMain.handle(ONBOARDING_IPC.load, () => workspaces().loadOnboarding())
@@ -134,6 +192,17 @@ ipcMain.on(IPC.preconnect, (e, input: string) => engines.get(e.sender.id)?.preco
 ipcMain.on(IPC.bounds, (e, bounds: Bounds) => engines.get(e.sender.id)?.setViewportBounds(bounds))
 ipcMain.on(OVERLAY_IPC.showTooltip, (e, req: TooltipRequest) => void tooltips.get(e.sender.id)?.show(req))
 ipcMain.on(OVERLAY_IPC.hideTooltip, (e) => tooltips.get(e.sender.id)?.hide())
+ipcMain.on(OVERLAY_IPC.agentEvent, (e, streamId: string, event: unknown) => {
+  // Sender is the shell renderer; forward to the overlay view of its window.
+  const overlay = overlays.get(e.sender.id)
+  if (overlay && !overlay.webContents.isDestroyed()) overlay.webContents.send(OVERLAY_IPC.agentEvent, streamId, event)
+})
+ipcMain.on(OVERLAY_IPC.agentNotice, (e, notice: unknown) =>
+  overlays.get(e.sender.id)?.showAgentNotice(notice as Parameters<FloatingOverlay['showAgentNotice']>[0])
+)
+ipcMain.on(OVERLAY_IPC.driftNotice, (e, notice: unknown) =>
+  overlays.get(e.sender.id)?.showDriftNotice(notice as Parameters<FloatingOverlay['showDriftNotice']>[0])
+)
 ipcMain.on(OVERLAY_IPC.showSurface, (e, req: SurfaceRequest) => overlays.get(e.sender.id)?.show(req))
 ipcMain.on(OVERLAY_IPC.hideSurface, (e) => overlays.get(e.sender.id)?.hide())
 ipcMain.on(OVERLAY_IPC.dismiss, (e, _kind: SurfaceKind) => {
@@ -153,10 +222,12 @@ ipcMain.handle(OVERLAY_IPC.action, (e, action: OverlayAction) => {
   if (!win || !shell || shell.isDestroyed()) throw new Error('Shell window is gone')
   const id = `a${++actionSeq}`
   return new Promise((resolve, reject) => {
+    // Generous cap: a magic:ask action waits on a full agent turn (up to
+    // CHAT_RUN_TIMEOUT_MS in main/agent/host.ts) before resolving.
     const timer = setTimeout(() => {
       pendingActions.delete(id)
       reject(new Error('Overlay action timed out'))
-    }, 30_000)
+    }, 180_000)
     pendingActions.set(id, {
       resolve: (v) => (clearTimeout(timer), resolve(v)),
       reject: (err) => (clearTimeout(timer), reject(err))

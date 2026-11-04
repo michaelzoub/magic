@@ -177,6 +177,23 @@ export class WorkspaceSwitchboard<T extends SwitchableWorkspace = SwitchableWork
     return this.switchTo(fallbackId, current)
   }
 
+  /**
+   * Quit the active workspace without switching anywhere: its live tabs are
+   * saved under it (as on a switch away), then no workspace is active
+   * (`activeId === null`, "non-set") while the workspace stays listed with
+   * its tabs intact. The open tabs themselves are untouched — the caller
+   * decides what quitting means for them (drift exit keeps them open).
+   * Returns the workspace left, or null when none was active.
+   */
+  deactivate(current?: WorkspaceTabSet): WorkspaceId | null {
+    if (this.active === null) return null
+    const left = this.active
+    if (current) this.tabSets.set(left, normalizeTabSet(current.tabs, current.activeTabId))
+    this.active = null
+    this.emit()
+    return left
+  }
+
   /** Create path: register a new workspace, then switch through the gate. */
   addAndSwitch(workspace: T, current?: WorkspaceTabSet): WorkspaceSwitchResult<T> {
     this.register(workspace)

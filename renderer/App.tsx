@@ -17,7 +17,12 @@ import { Toolbar } from '@/components/browser/Toolbar'
 import { Viewport } from '@/components/browser/Viewport'
 import { shouldShowStartupRecovery } from '@/components/browser/startupRecovery'
 import { embeddedAgent } from '@/adapters/agent'
-import type { AgentWorkspaceInfo } from '@shared/agent'
+import { canAssistanceRestructure, DEFAULT_ASSISTANCE, type AgentStreamEvent, type AgentSwitchNoticeState, type AgentTabProposal, type AgentWorkspaceInfo, type AssistanceSettings } from '@shared/agent'
+import { AgentSwitchNotice } from '@/components/browser/AgentSwitchNotice'
+import { WorkspaceDriftNotice } from '@/components/browser/WorkspaceDriftNotice'
+import { assessTabAgainstGoal, GoalDriftTracker } from '@core/workspaces/goalDrift'
+import type { WorkspaceDriftNoticeState } from '@shared/overlay'
+import { describeAgentEvent } from '@/components/browser/agentNotice'
 
 export function App() {
   const { tabs, activeTabId, activeTab, engine } = useBrowser()
@@ -39,6 +44,13 @@ export function App() {
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const ws = useWorkspaces()
+  // Serializable workspace rows for Memory cards' icons; keyed on the fields
+  // they use so the overlay surface is only re-pushed when those change.
+  const memoryWorkspaces = useMemo(
+    () => ws.all.map((w) => ({ id: w.id, name: w.name, goal: w.goal, icon: w.icon })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ws.all.map((w) => `${w.id}|${w.name}|${w.icon}`).join('\n')]
+  )
   // In Electron, dialogs/dropdowns render in the native overlay layer
   // (window.overlay); without it (plain browser) they render in-DOM below.
   const nativeOverlay = typeof window !== 'undefined' ? window.overlay : undefined
@@ -99,13 +111,19 @@ export function App() {
     plan: WorkspaceSwitchPlan
   ) => {
     const from = fromId ? ws.all.find((w) => w.id === fromId) : undefined
-    if (!from || from.id === to.id) return
+    if (!from || from.id === to.id) return null
+    // Saved immediately (everything is saved); shown only if the agent's
+    // switch run judges it meaningful. The id is minted here so the verdict
+    // can be applied to exactly this checkpoint when the run finishes.
+    const checkpointId = crypto.randomUUID() as CheckpointId
     memory.record({
+      checkpointId,
       beforeTabs: current.tabs,
       beforeActiveTabId: current.activeTabId,
       beforeTitle: from.name,
       after: { workspaceId: to.id, title: to.title, tabs: plan.tabs, activeTabId: plan.activeTabId }
     })
+    return checkpointId
   }
 
   /**
@@ -114,25 +132,110 @@ export function App() {
    * close/navigate tabs in the now-active workspace via its tools.
    * Fire-and-forget — a slow or unavailable agent never delays switching.
    */
+  // Global background-assistance state (owned by the agent host in main;
+  // this is the shell's mirror for gating + the popover). Turning it off
+  // only stops the agent restructuring — switching and session restoration
+  // below never consult it.
+  const [assistance, setAssistance] = useState<AssistanceSettings>(DEFAULT_ASSISTANCE)
+  useEffect(() => {
+    void embeddedAgent.getAssistance().then(setAssistance).catch(() => {})
+  }, [])
+  const setAssistanceActive = async (active: boolean): Promise<AssistanceSettings> => {
+    const next = await embeddedAgent.setAssistanceActive(active)
+    setAssistance(next)
+    return next
+  }
+  const setAssistanceExclusions = async (excludedSites: string[], excludedWorkspaceIds: string[]): Promise<AssistanceSettings> => {
+    const next = await embeddedAgent.setAssistanceExclusions(excludedSites, excludedWorkspaceIds)
+    setAssistance(next)
+    return next
+  }
+
+  // Bottom-center agent notice for switch runs: shown the moment a run
+  // starts, fed live traces, and turned into an approval prompt when the
+  // run concludes with staged tab proposals. In Electron it is mirrored
+  // into the native overlay (below) so it paints above the page view.
+  const [agentNotice, setAgentNotice] = useState<AgentSwitchNoticeState | null>(null)
+  const agentNoticeRun = useRef(0)
+
+  /** Enact approved proposals, in the order the agent proposed them. */
+  const applyAgentProposals = async (proposals: AgentTabProposal[]) => {
+    const live = await engine.getSnapshot().catch(() => null)
+    const liveIds = new Set((live?.tabs ?? tabs).map((t) => t.id))
+    for (const p of proposals) {
+      try {
+        if (p.kind === 'open') await engine.createTab(p.url || undefined)
+        else if (p.kind === 'close') { if (liveIds.has(p.tabId)) await engine.closeTab(p.tabId) }
+        else if (liveIds.has(p.tabId)) await engine.navigate(p.tabId, p.url)
+      } catch {
+        // One stale proposal (tab already gone) must not stop the rest.
+      }
+    }
+  }
+
   const runSwitchAgent = (
     fromId: string | null,
     to: AgentWorkspaceInfo,
     current: ReturnType<typeof currentTabSet>,
-    plan: WorkspaceSwitchPlan
+    plan: WorkspaceSwitchPlan,
+    checkpointId?: CheckpointId | null
   ) => {
+    if (!canAssistanceRestructure(assistance, to.id)) {
+      console.info('[agent] workspace switch run skipped: background assistance off or workspace excluded')
+      return
+    }
     const from = fromId ? ws.all.find((w) => w.id === fromId) : undefined
+    const runId = ++agentNoticeRun.current
+    setAgentNotice({
+      id: String(runId),
+      fromName: from?.name ?? null,
+      toName: to.name,
+      phase: 'running',
+      traces: [],
+      reply: null,
+      proposals: []
+    })
     void embeddedAgent
-      .workspaceSwitched({
-        from: from ? { id: from.id, name: from.name, goal: from.goal } : null,
-        to,
-        outgoingTabs: current.tabs.map((t) => ({ title: t.title, url: t.url })),
-        incomingTabs: plan.tabs.map((t) => ({ title: t.title ?? '', url: t.url }))
-      })
+      .workspaceSwitched(
+        {
+          from: from ? { id: from.id, name: from.name, goal: from.goal } : null,
+          to,
+          outgoingTabs: current.tabs.map((t) => ({ title: t.title, url: t.url })),
+          incomingTabs: plan.tabs.map((t) => ({ title: t.title ?? '', url: t.url }))
+        },
+        (event) => {
+          const trace = describeAgentEvent(event)
+          if (!trace) return
+          setAgentNotice((n) =>
+            n && n.id === String(runId) && n.phase === 'running' && n.traces[n.traces.length - 1] !== trace
+              ? { ...n, traces: [...n.traces, trace].slice(-5) }
+              : n
+          )
+        }
+      )
       .then((r) => {
+        // The agent judged this switch as a checkpoint: apply its verdict.
+        // No verdict (skipped/failed/unjudged) leaves it saved but hidden.
+        if (checkpointId && r.checkpointVerdict) {
+          memory.setMeaningful(checkpointId, r.checkpointVerdict.meaningful, r.checkpointVerdict.reason)
+        }
         if (r.status === 'failed' || r.status === 'skipped') console.info('[agent] workspace switch run', r.status, r.reason ?? '')
         else if (r.reply) console.info('[agent] workspace switch run', r.status, r.reply)
+        setAgentNotice((n) =>
+          n && n.id === String(runId)
+            ? {
+                ...n,
+                phase: r.status === 'completed' || r.status === 'awaiting-input' ? 'done' : r.status === 'skipped' ? 'skipped' : 'failed',
+                reply: r.reply,
+                reason: r.reason,
+                proposals: r.proposals ?? []
+              }
+            : n
+        )
       })
-      .catch(() => {})
+      .catch(() => {
+        setAgentNotice((n) => (n && n.id === String(runId) ? { ...n, phase: 'failed', reason: 'The agent run failed.' } : n))
+      })
   }
 
   /** Switch workspaces: the target workspace's respective tabs become the open tabs. */
@@ -145,9 +248,9 @@ export function App() {
     const current = currentTabSet()
     const plan = ws.select(workspaceId, current)
     if (plan) {
-      if (target) recordTransition(fromId, { id: target.id, title: target.name }, current, plan)
+      const checkpointId = target ? recordTransition(fromId, { id: target.id, title: target.name }, current, plan) : null
       await applySwitch(workspaceId, plan)
-      if (target) runSwitchAgent(fromId, { id: target.id, name: target.name, goal: target.goal }, current, plan)
+      if (target) runSwitchAgent(fromId, { id: target.id, name: target.name, goal: target.goal }, current, plan, checkpointId)
     }
   }
 
@@ -158,9 +261,9 @@ export function App() {
     const current = currentTabSet()
     const { error, plan, workspaceId } = ws.create(name, goal, current)
     if (!error && plan) {
-      if (workspaceId) recordTransition(fromId, { id: workspaceId, title: name.trim() }, current, plan)
+      const checkpointId = workspaceId ? recordTransition(fromId, { id: workspaceId, title: name.trim() }, current, plan) : null
       if (workspaceId) await applySwitch(workspaceId, plan)
-      if (workspaceId) runSwitchAgent(fromId, { id: workspaceId, name: name.trim(), goal: goal.trim() }, current, plan)
+      if (workspaceId) runSwitchAgent(fromId, { id: workspaceId, name: name.trim(), goal: goal.trim() }, current, plan, checkpointId)
     }
     return error
   }
@@ -179,6 +282,51 @@ export function App() {
     return plan ? nextId : ws.activeId
   }
 
+  // Goal drift: while a workspace is active, judge each new tab navigation
+  // against its goal (see @core/workspaces/goalDrift). Two consecutive
+  // unrelated navigations quit the workspace — it becomes non-set, its tabs
+  // stay open outside it — and the small bottom-right notice explains why.
+  // Tabs already open when a workspace becomes active are primed (never
+  // judged), plus a short grace period covers the switch's tab restore, so
+  // only browsing the user actually does here can trigger an exit.
+  const [driftNotice, setDriftNotice] = useState<WorkspaceDriftNoticeState | null>(null)
+  const driftTracker = useRef(new GoalDriftTracker(2))
+  const driftSession = useRef<{ workspaceId: string; since: number } | null>(null)
+  const dismissDriftNotice = () => setDriftNotice(null)
+  useEffect(() => {
+    const active = ws.all.find((w) => w.id === ws.activeId) ?? null
+    if (!active) {
+      driftTracker.current.reset()
+      driftSession.current = null
+      return
+    }
+    if (driftSession.current?.workspaceId !== active.id) {
+      driftTracker.current.reset()
+      driftSession.current = { workspaceId: active.id, since: Date.now() }
+    }
+    if (Date.now() - driftSession.current.since < 1000) {
+      for (const t of tabs) driftTracker.current.prime(t.id, t.url)
+      return
+    }
+    for (const t of tabs) {
+      const { verdict } = assessTabAgainstGoal(active, t)
+      if (!driftTracker.current.observe(t.id, t.url, verdict).shouldExit) continue
+      driftTracker.current.reset()
+      driftSession.current = null
+      ws.quit(currentTabSet())
+      setStartupRecovery('ineligible')
+      setDriftNotice({ workspaceName: active.name })
+      break
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs, ws.activeId, ws.all])
+
+  // Mirror the drift notice into the native overlay so it paints above the
+  // page view (shell DOM can never overlap a WebContentsView).
+  useEffect(() => {
+    nativeOverlay?.showDriftNotice(driftNotice)
+  }, [nativeOverlay, driftNotice])
+
   // Startup recovery gate for the recent-switch prompt: evaluated exactly
   // once, when workspaces have rehydrated at fresh app open. Eligible only
   // if nothing real is open — neither restored saved tabs nor a live tab
@@ -193,7 +341,7 @@ export function App() {
     startupEvaluated.current = true
     const saved = ws.getTabSet(ws.activeId)
     const hasOpenTabs = saved.tabs.some((t) => t.url) || tabs.some((t) => t.url)
-    const show = shouldShowStartupRecovery({ atStartup: true, hasOpenTabs, hasCheckpoint: memory.checkpoints.length > 0 })
+    const show = shouldShowStartupRecovery({ atStartup: true, hasOpenTabs, hasCheckpoint: memory.visibleCheckpoints.length > 0 })
     setStartupRecovery(show ? 'eligible' : 'ineligible')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws.ready])
@@ -249,10 +397,68 @@ export function App() {
     setMemoryOpen(false)
   }
 
+  /** Open a tab found from the magic popover: switch to its workspace first, then activate it. */
+  const openMagicTab = async (workspaceId: string | null, tabId: string) => {
+    if (workspaceId && workspaceId !== ws.activeId) await selectWorkspace(workspaceId)
+    await engine.activateTab(tabId)
+  }
+
+  /**
+   * Every chatbox question goes to the embedded agent: it thinks, may drive
+   * the browser with its tools (agent/tools/* via the main-process bridge),
+   * and its final reply is shown in the popover transcript.
+   */
+  const askAgent = async (request: string, onEvent?: (event: AgentStreamEvent) => void) => {
+    const active = ws.all.find((w) => w.id === ws.activeId) ?? null
+    // Save a checkpoint of the moment the question was asked (everything is
+    // saved); the chat agent judges whether the turn made it meaningful —
+    // e.g. it opened a set of tabs or built research worth returning to —
+    // and only then is it shown in Memory.
+    const current = currentTabSet()
+    const checkpointId = crypto.randomUUID() as CheckpointId
+    memory.record({
+      checkpointId,
+      beforeTabs: current.tabs,
+      beforeActiveTabId: current.activeTabId,
+      beforeTitle: active?.name ?? 'Magic chat',
+      after: {
+        workspaceId: active?.id ?? 'magic-chat',
+        title: active?.name ?? 'Magic chat',
+        tabs: current.tabs,
+        activeTabId: current.activeTabId
+      }
+    })
+    const result = await embeddedAgent.ask(
+      request,
+      {
+        workspace: active ? { id: active.id, name: active.name, goal: active.goal } : null,
+        tabs: tabs.map((t) => ({ title: t.title ?? '', url: t.url }))
+      },
+      onEvent
+    )
+    if (result.checkpointVerdict) {
+      memory.setMeaningful(checkpointId, result.checkpointVerdict.meaningful, result.checkpointVerdict.reason)
+    }
+    return result
+  }
+
+  /** Legacy organize action: also a question for the agent now. */
+  const organizeRequest = (request: string) => askAgent(request)
+
+  /** Undo the latest recorded reorganization: restore its checkpoint's Before tabs. */
+  const undoCheckpoint = async (checkpointId: string) => {
+    await navigateMemory(checkpointId as CheckpointId, 'before')
+  }
+
   // --- Native overlay surfaces -------------------------------------------------
   // Latest callbacks for the (once-registered) overlay action handler.
-  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, reloadActive: () => id && engine.reload(id) })
-  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, reloadActive: () => id && engine.reload(id) }
+  const applyNoticeProposals = async (proposals: AgentTabProposal[]) => {
+    setAgentNotice(null)
+    await applyAgentProposals(proposals)
+  }
+  const dismissAgentNotice = () => setAgentNotice(null)
+  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) })
+  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) }
 
   useEffect(() => {
     if (!nativeOverlay) return
@@ -282,20 +488,51 @@ export function App() {
           return h.createWorkspace(action.name, action.goal)
         case 'workspace:delete':
           return h.deleteWorkspace(action.id)
+        case 'magic:open-tab':
+          await h.openMagicTab(action.workspaceId, action.tabId)
+          return null
+        case 'magic:organize':
+          return h.organizeRequest(action.request)
+        case 'magic:ask':
+          // Stream events travel back to the overlay on their own channel,
+          // tagged with the streamId the overlay generated for this ask.
+          return h.askAgent(action.request, (event) => nativeOverlay?.pushMagicAgentEvent(action.streamId, event))
+        case 'magic:set-assistance':
+          return h.setAssistanceActive(action.active)
+        case 'magic:set-exclusions':
+          return h.setAssistanceExclusions(action.excludedSites, action.excludedWorkspaceIds)
+        case 'magic:undo':
+          await h.undoCheckpoint(action.checkpointId)
+          return null
+        case 'agent:apply-proposals':
+          await h.applyNoticeProposals(action.proposals)
+          return null
+        case 'agent:dismiss-notice':
+          h.dismissAgentNotice()
+          return null
+        case 'drift:dismiss-notice':
+          h.dismissDriftNotice()
+          return null
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nativeOverlay])
 
+  // Mirror the agent switch notice into the native overlay so it paints
+  // above the page view (shell DOM can never overlap a WebContentsView).
+  useEffect(() => {
+    nativeOverlay?.showAgentNotice(agentNotice)
+  }, [nativeOverlay, agentNotice])
+
   // Push the open dialog (if any) into the native overlay; it re-renders there
   // on every push, so live data (Memory checkpoints) stays current.
   useEffect(() => {
     if (!nativeOverlay) return
-    if (memoryOpen) nativeOverlay.showSurface({ kind: 'memory', checkpoints: memory.checkpoints })
+    if (memoryOpen) nativeOverlay.showSurface({ kind: 'memory', checkpoints: memory.visibleCheckpoints, workspaces: memoryWorkspaces })
     else if (importOpen) nativeOverlay.showSurface({ kind: 'import' })
     else if (profileOpen) nativeOverlay.showSurface({ kind: 'profile', completed })
     else if (onboardingOpen) nativeOverlay.showSurface({ kind: 'onboarding' })
-  }, [nativeOverlay, memoryOpen, importOpen, profileOpen, completed, onboardingOpen, memory.checkpoints])
+  }, [nativeOverlay, memoryOpen, importOpen, profileOpen, completed, onboardingOpen, memory.visibleCheckpoints, memoryWorkspaces])
 
   // A dialog closed from the shell side (e.g. Memory navigation) must also
   // leave the native overlay. The workspace menu is not driven by these
@@ -323,13 +560,26 @@ export function App() {
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onWidthChange={syncHeaderInset}
         onMemory={() => setMemoryOpen(true)}
-        memoryCount={memory.checkpoints.length}
+        memoryCount={memory.visibleCheckpoints.length}
         onSettings={() => setProfileOpen(true)}
         profile={profile ? { displayName: profile.displayName, identity: identitySpec } : null}
         ws={ws}
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createWorkspace}
         onDeleteWorkspace={deleteWorkspace}
+        magicTabs={tabs.map((t) => ({ id: t.id, title: t.title ?? '', url: t.url }))}
+        onOpenMagicTab={(tab) => void openMagicTab(tab.workspaceId, tab.id)}
+        onAskRequest={askAgent}
+        assistance={assistance}
+        magicActivity={memory.visibleCheckpoints.slice(0, 5).map((c) => ({
+          id: c.id,
+          title: `${c.before.title} → ${c.after.title}`,
+          detail: `${c.before.tabs.length} tab${c.before.tabs.length === 1 ? '' : 's'} → ${c.after.tabs.length} tab${c.after.tabs.length === 1 ? '' : 's'}`,
+          checkpointId: c.id as string
+        }))}
+        onSetAssistance={(active) => void setAssistanceActive(active)}
+        onSetExclusions={(sites, workspaceIds) => void setAssistanceExclusions(sites, workspaceIds)}
+        onUndoMagic={(checkpointId) => void undoCheckpoint(checkpointId)}
       />
       {/* Page area is flush with the panel edge and the window's right and
           bottom edges — no gutter or inset card around the page. */}
@@ -370,13 +620,47 @@ export function App() {
             blank tabs never get the prompt (startupRecovery gate above). */}
         <Viewport
           tab={activeTab}
-          resume={startupRecovery === 'eligible' ? (memory.checkpoints[0] ?? null) : null}
+          resume={startupRecovery === 'eligible' ? (memory.visibleCheckpoints[0] ?? null) : null}
           onResume={() => {
-            const latest = memory.checkpoints[0]
+            const latest = memory.visibleCheckpoints[0]
             if (latest) void navigateMemory(latest.id, 'before')
           }}
+          workspaceName={ws.all.find((w) => w.id === ws.activeId)?.name ?? null}
+          switchStats={ws.switchStats}
+          recent={(() => {
+            // Recently used in this workspace: live tabs with a URL first,
+            // then the workspace's saved tabs, deduped by URL (cap 8).
+            const seen = new Set<string>()
+            const items: { id?: string; title: string; url: string; favicon?: string }[] = []
+            const push = (item: { id?: string; title: string; url: string; favicon?: string }) => {
+              if (!item.url || seen.has(item.url) || items.length >= 8) return
+              seen.add(item.url)
+              items.push(item)
+            }
+            for (const t of tabs) push({ id: t.id, title: t.title ?? '', url: t.url, favicon: t.favicon })
+            for (const t of ws.getTabSet(ws.activeId).tabs) push({ title: t.title ?? '', url: t.url, favicon: t.favicon })
+            return items
+          })()}
+          onNavigate={(input) => {
+            setStartupRecovery('ineligible')
+            if (id) void engine.navigate(id, input)
+            else void engine.createTab(input)
+          }}
+          onOpenRecent={(item) => {
+            setStartupRecovery('ineligible')
+            if (item.id && tabs.some((t) => t.id === item.id)) void engine.activateTab(item.id)
+            else if (id) void engine.navigate(id, item.url)
+            else void engine.createTab(item.url)
+          }}
+          onViewAll={() => setMemoryOpen(true)}
         />
       </main>
+      {!nativeOverlay && agentNotice && (
+        <AgentSwitchNotice notice={agentNotice} onApply={(proposals) => void applyNoticeProposals(proposals)} onDismiss={dismissAgentNotice} />
+      )}
+      {!nativeOverlay && driftNotice && (
+        <WorkspaceDriftNotice workspaceName={driftNotice.workspaceName} onDismiss={dismissDriftNotice} />
+      )}
       {!nativeOverlay && (
         <>
           <OnboardingWizard
@@ -395,7 +679,7 @@ export function App() {
             onImportLogins={() => (setProfileOpen(false), setImportOpen(true))}
             onSaveProfile={saveProfile}
           />
-          <MemoryDialog open={memoryOpen} checkpoints={memory.checkpoints} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
+          <MemoryDialog open={memoryOpen} checkpoints={memory.visibleCheckpoints} workspaces={memoryWorkspaces} onClose={() => setMemoryOpen(false)} onNavigate={navigateMemory} />
           <ImportLoginsDialog
             open={importOpen}
             onClose={() => setImportOpen(false)}

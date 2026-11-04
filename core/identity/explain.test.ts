@@ -34,7 +34,7 @@ describe('buildIdentityReport', () => {
 
   it('prefers the canonical identityInputs stored at completion', () => {
     const fromAnswers = buildIdentityReport(answers)
-    const report = buildIdentityReportFromCompleted({
+    const completed = {
       profile: {
         displayName: 'Alex', goal: 'composed goal text that differs from the raw answers',
         identitySeed: fromAnswers.seed, onboardingCompletedAt: 1000, createdAt: 1000, updatedAt: 1000
@@ -46,14 +46,19 @@ describe('buildIdentityReport', () => {
           { id: 'name', label: 'Your name', part: 'name:Alex', summary: 'Alex' },
           { id: 'description', label: 'Your description', part: 'description:A student and builder.', summary: 'A student and builder.' },
           { id: 'areas', label: 'Areas you picked', part: 'areas:Coding,Work', summary: 'Coding, Work' },
+          // Legacy stored summary: goals joined with a decorative middle dot.
           { id: 'goals', label: 'Goals you set', part: 'goals:Build software,Ship v2', summary: 'Build software · Ship v2' },
           { id: 'sites', label: 'Example sites', part: 'sites:github.com,gmail.com', summary: 'github.com, gmail.com' }
         ]
       }
-    })!
+    }
+    const report = buildIdentityReportFromCompleted(completed)!
     expect(report.seedPreserved).toBe(false)
     expect(report.spec).toEqual(fromAnswers.spec)
     expect(report.influences.find((i) => i.id === 'goals')!.summary).toBe('Build software · Ship v2')
+    // The human-readable explanation normalises the legacy separator away.
+    const explanation = buildIdentityExplanation(completed)!
+    expect(explanation.influences.find((i) => i.id === 'goals')!.summary).toBe('Build software, Ship v2')
   })
 
   it('explains the totem in human-readable terms derived from the actual spec', () => {
