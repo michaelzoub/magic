@@ -284,15 +284,23 @@ export function App() {
 
   // Goal drift: while a workspace is active, judge each new tab navigation
   // against its goal (see @core/workspaces/goalDrift). Two consecutive
-  // unrelated navigations quit the workspace — it becomes non-set, its tabs
-  // stay open outside it — and the small bottom-right notice explains why.
+  // unrelated navigations show the small bottom-right warning; the workspace
+  // stays active. The streak then restarts so the warning doesn't repeat on
+  // every further tab.
   // Tabs already open when a workspace becomes active are primed (never
   // judged), plus a short grace period covers the switch's tab restore, so
-  // only browsing the user actually does here can trigger an exit.
+  // only browsing the user actually does here can trigger a warning.
   const [driftNotice, setDriftNotice] = useState<WorkspaceDriftNoticeState | null>(null)
   const driftTracker = useRef(new GoalDriftTracker(2))
   const driftSession = useRef<{ workspaceId: string; since: number } | null>(null)
   const dismissDriftNotice = () => setDriftNotice(null)
+  const quitDriftedWorkspace = () => {
+    setDriftNotice(null)
+    driftTracker.current.reset()
+    driftSession.current = null
+    ws.quit(currentTabSet())
+    setStartupRecovery('ineligible')
+  }
   useEffect(() => {
     const active = ws.all.find((w) => w.id === ws.activeId) ?? null
     if (!active) {
@@ -311,10 +319,7 @@ export function App() {
     for (const t of tabs) {
       const { verdict } = assessTabAgainstGoal(active, t)
       if (!driftTracker.current.observe(t.id, t.url, verdict).shouldExit) continue
-      driftTracker.current.reset()
-      driftSession.current = null
-      ws.quit(currentTabSet())
-      setStartupRecovery('ineligible')
+      driftTracker.current.resetStreak()
       setDriftNotice({ workspaceName: active.name })
       break
     }
@@ -457,8 +462,8 @@ export function App() {
     await applyAgentProposals(proposals)
   }
   const dismissAgentNotice = () => setAgentNotice(null)
-  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) })
-  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, reloadActive: () => id && engine.reload(id) }
+  const overlayHandlers = useRef({ navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, quitDriftedWorkspace, reloadActive: () => id && engine.reload(id) })
+  overlayHandlers.current = { navigateMemory, selectWorkspace, createWorkspace, deleteWorkspace, openMagicTab, organizeRequest, askAgent, undoCheckpoint, setAssistanceActive, setAssistanceExclusions, applyNoticeProposals, dismissAgentNotice, dismissDriftNotice, quitDriftedWorkspace, reloadActive: () => id && engine.reload(id) }
 
   useEffect(() => {
     if (!nativeOverlay) return
@@ -512,6 +517,9 @@ export function App() {
           return null
         case 'drift:dismiss-notice':
           h.dismissDriftNotice()
+          return null
+        case 'drift:quit-workspace':
+          h.quitDriftedWorkspace()
           return null
       }
     })
@@ -659,7 +667,7 @@ export function App() {
         <AgentSwitchNotice notice={agentNotice} onApply={(proposals) => void applyNoticeProposals(proposals)} onDismiss={dismissAgentNotice} />
       )}
       {!nativeOverlay && driftNotice && (
-        <WorkspaceDriftNotice workspaceName={driftNotice.workspaceName} onDismiss={dismissDriftNotice} />
+        <WorkspaceDriftNotice workspaceName={driftNotice.workspaceName} onDismiss={dismissDriftNotice} onQuit={quitDriftedWorkspace} />
       )}
       {!nativeOverlay && (
         <>

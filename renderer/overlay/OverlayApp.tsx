@@ -36,6 +36,7 @@ export function OverlayApp() {
         <WorkspaceDriftNotice
           workspaceName={drift.workspaceName}
           onDismiss={() => { void host.requestAction({ type: 'drift:dismiss-notice' }) }}
+          onQuit={() => { void host.requestAction({ type: 'drift:quit-workspace' }) }}
         />
       )}
       {notice && host && (

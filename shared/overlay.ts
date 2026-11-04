@@ -116,6 +116,8 @@ export type OverlayAction =
   | { type: 'agent:dismiss-notice' }
   /** Dismiss the workspace drift notice. */
   | { type: 'drift:dismiss-notice' }
+  /** Quit the active workspace from the drift notice (tabs stay open, outside any workspace). */
+  | { type: 'drift:quit-workspace' }
 
 /**
  * Floating shell UI that must paint above the native page view. Renderer DOM

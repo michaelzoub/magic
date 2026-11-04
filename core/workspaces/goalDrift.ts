@@ -117,6 +117,11 @@ export class GoalDriftTracker {
     return { streak: this.streak, shouldExit: this.streak >= this.threshold }
   }
 
+  /** Restart the unrelated streak but keep already-judged tabs judged. */
+  resetStreak(): void {
+    this.streak = 0
+  }
+
   reset(): void {
     this.seen.clear()
     this.streak = 0
