@@ -1,33 +1,28 @@
-# Source layout
+# Magic
 
-- `main/` — Electron main process (browser shell host). Entry: `main/index.ts`.
-  - `browser/` — native engine, page driver, tooltip overlay (`WebContentsView`s).
-  - `db/` — SQLite persistence (only place `node:sqlite` is used).
-  - `imports/` — Chrome login import (Keychain/crypto, external data).
-  - `agent/` — wiring that binds the native engine/page driver to agent tools.
-- `preload/` — context bridge exposed to the renderer.
-- `renderer/` — Preact UI.
-  - `components/ui/` — primitives (Dialog, Popover, Tooltip, IconButton, icons).
-  - `components/browser/` — browser chrome (Sidebar, TabStrip, Toolbar, Viewport…).
-  - `components/{memory,imports,workspaces}/` — feature dialogs/pickers.
-  - `features/onboarding/` — onboarding flow UI + save/load orchestration.
-  - `hooks/` — React hooks over the engine/persistence (`useBrowser`, …).
-  - `adapters/` — in-memory fallbacks so the UI runs in a plain browser tab.
-- `agent/` — the Eve agent (see `agent/README.md`). Eve-facing surface is thin:
-  `agent.ts` (runtime config), `instructions.md`, and one re-export file per
-  tool in `tools/` (Eve derives tool names from filenames).
-  - `lib/tools/` — runtime-agnostic agent tools + registry. No Electron or Eve
-    imports; native implementations are injected via `ports.ts` from
-    `main/agent/`. This is the hot-swappable core.
-  - `lib/model.ts` — the only place provider specifics live (default: Meta
-    Muse Spark via the Meta Model API).
-  - `lib/eve/` — Eve adapters (`toEveTool`, host `ToolContext` bridge).
-  - `lib/runtime/` — framework-agnostic `AgentRuntime` contract app code
-    calls, with `eve-client.ts` as its current Eve implementation.
-- `core/` — pure domain logic, no Electron/React: `workspaces/`, `memory/`,
-  `onboarding/`. Tests are colocated.
-- `shared/` — cross-process contracts only: IPC channel names, payload types,
-  and the `BrowserEngine` interface all processes agree on. Not a utils dump;
-  helpers belong with the code that uses them.
+A lightweight, intent-driven browser that adapts to what you're working on.
 
-Aliases: `@shared/*`, `@core/*`, `@agent/*`, `@/*` (renderer).
+An AI agent understands your browsing context, automatically organizes your tabs, and keeps a recoverable workspace for each activity. Switching between studying, coding, and research becomes as seamless as switching between apps — without ever losing your place.
+
+## The idea
+
+Most browsers organize tabs. Magic organizes *activities*.
+
+Each workspace has a name and a goal — "Study for finals," "Ship the launch," "Plan the trip" — and remembers exactly which tabs belong to it. Open a workspace and its tabs come back, just as you left them. Wander into something else, and Magic notices, tidies up, and keeps a checkpoint so you can return to any earlier moment from Memory.
+
+## Design & engineering decisions
+
+- **The workspace, not the tab, is the basic unit.** Tabs are grouped by what you're trying to do, and each workspace saves its own tab set. Switching replaces the open tabs with the target workspace's — never a merge — so each activity stays clean and predictable (`core/workspaces/switchboard.ts:52`).
+- **Nothing is lost by design.** Before the agent reorganizes anything, the current tabs are saved as a restorable checkpoint (`core/memory/state.ts:107`). Workspaces, tabs, and switch history are stored locally in SQLite, so everything survives a restart (`main/db/workspace-db.ts:136`).
+- **The agent helps, but never blocks you.** It works in the background and can be paused; if it's unavailable, switching workspaces still works. You can exclude specific sites or workspaces, and excluded tabs are never shown to the agent (`main/agent/host.ts:113`).
+- **Parts are kept small and replaceable.** Browsing, workspaces, memory, and the agent are separate pieces with narrow connections between them. The agent's tools don't depend on a particular AI model or framework, so either can be swapped without rebuilding the browser (`agent/lib/tools/ports.ts:1`, `agent/README.md:98`).
+
+## For developers
+
+```bash
+npm run dev        # run the app
+npm test           # run tests
+npm run typecheck  # check types
+```
+
+Source layout: `main/` (Electron shell), `renderer/` (UI), `core/` (workspaces, memory, onboarding — no UI or Electron), `agent/` (the AI agent), `shared/` (contracts between processes). See `agent/README.md` for how the agent is wired.
