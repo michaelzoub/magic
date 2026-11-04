@@ -3,6 +3,7 @@ import {
   createMemoryState,
   listCheckpoints,
   recordReorg,
+  setCheckpointMeaning,
   restoreCheckpoint,
   type CheckpointId,
   type MemoryState,
@@ -39,6 +40,8 @@ function seed(): MemoryState {
     ],
     beforeActiveTabId: 'seed-gc',
     beforeTitle: 'Music, school & code mix',
+    meaningful: true,
+    meaningfulReason: 'Seed example',
     after: CODE_FOCUS,
     createdAt: now - 42 * 60_000
   })
@@ -50,6 +53,8 @@ function seed(): MemoryState {
     ],
     beforeActiveTabId: 'seed-sp',
     beforeTitle: 'Music & coding rabbit hole',
+    meaningful: true,
+    meaningfulReason: 'Seed example',
     after: CODE_FOCUS,
     createdAt: now - 6 * 60_000
   })
@@ -127,7 +132,28 @@ export function useMemory() {
     []
   )
 
-  return { state, checkpoints: listCheckpoints(state), restoredCheckpointId: state.restoredCheckpointId, record, restore }
+  /** Apply the agent's verdict to a saved checkpoint; it stays saved either way. */
+  const setMeaningful = useCallback((checkpointId: CheckpointId, meaningful: boolean, reason?: string | null) => {
+    setState((s) => {
+      try {
+        return setCheckpointMeaning(s, checkpointId, meaningful, reason)
+      } catch {
+        return s
+      }
+    })
+  }, [])
+
+  return {
+    state,
+    /** Every checkpoint ever recorded (all are saved and restorable by id). */
+    checkpoints: listCheckpoints(state),
+    /** Only the agent-judged meaningful checkpoints — the ones shown to the user. */
+    visibleCheckpoints: listCheckpoints(state).filter((c) => c.meaningful),
+    restoredCheckpointId: state.restoredCheckpointId,
+    record,
+    restore,
+    setMeaningful
+  }
 }
 
 export type UseMemory = ReturnType<typeof useMemory>

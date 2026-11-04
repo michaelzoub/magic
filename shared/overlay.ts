@@ -1,5 +1,6 @@
 import type { Bounds } from './engine'
 import type { Checkpoint, CheckpointId } from '@core/memory/types'
+import type { AgentStreamEvent, AgentSwitchNoticeState, AgentTabProposal, AssistanceSettings } from './agent'
 import type { CompletedOnboarding } from './onboarding'
 
 export type TooltipSide = 'top' | 'right' | 'bottom'
@@ -12,6 +13,11 @@ export interface TooltipRequest {
   side: TooltipSide
   /** Anchor element rect, in window CSS pixels. */
   anchor: Bounds
+}
+
+/** Small bottom-right notice shown when goal drift quits the active workspace. */
+export interface WorkspaceDriftNoticeState {
+  workspaceName: string
 }
 
 /** Serializable workspace row shown in the native workspace dropdown. */
@@ -28,7 +34,7 @@ export interface OverlayWorkspace {
  * WebContentsView — never by painting over / detaching the page view.
  */
 export type SurfaceRequest =
-  | { kind: 'memory'; checkpoints: Checkpoint[] }
+  | { kind: 'memory'; checkpoints: Checkpoint[]; workspaces: OverlayWorkspace[] }
   | { kind: 'import' }
   | { kind: 'onboarding' }
   | { kind: 'profile'; completed: CompletedOnboarding | null }
@@ -39,6 +45,46 @@ export type SurfaceRequest =
       workspaces: OverlayWorkspace[]
       activeId: string | null
     }
+  | { kind: 'magic-popover'; anchor: Bounds; context: MagicContext }
+
+/** A tab the magic popover can find and open, in the current or a saved workspace. */
+export interface MagicTab {
+  id: string
+  title: string
+  url: string
+  workspaceId: string | null
+  workspaceName: string
+}
+
+/** A workspace with saved tabs the user can pick back up from the magic popover. */
+export interface MagicResumable {
+  workspaceId: string
+  workspaceName: string
+  tabCount: number
+  /** Title of the tab that was active when the workspace was left, when known. */
+  activeTabTitle: string
+}
+
+/** One recent-activity row in the magic popover; `checkpointId` is set when it can be undone. */
+export interface MagicActivity {
+  id: string
+  title: string
+  detail: string
+  checkpointId: string | null
+}
+
+/** Serializable snapshot the shell hands the magic popover when it opens. */
+export interface MagicContext {
+  workspace: { id: string; name: string; goal: string } | null
+  tabs: MagicTab[]
+  resumable: MagicResumable[]
+  /** Global background-assistance state (see @shared/agent). */
+  assistance: AssistanceSettings
+  /** All workspaces, for the workspace exclusions list. */
+  workspaces: { id: string; name: string }[]
+  /** Recent workspace activity, most recent first. */
+  activity: MagicActivity[]
+}
 
 export type SurfaceKind = SurfaceRequest['kind']
 
@@ -51,6 +97,25 @@ export type OverlayAction =
   | { type: 'workspace:select'; id: string }
   | { type: 'workspace:create'; name: string; goal: string }
   | { type: 'workspace:delete'; id: string }
+  /** Open a tab found from the magic popover, switching workspace first when it lives in another one. */
+  | { type: 'magic:open-tab'; workspaceId: string | null; tabId: string }
+  /** The user asked, from the magic popover, for help organizing the current workspace. */
+  | { type: 'magic:organize'; request: string }
+  /** A chatbox question for the agent; resolves with the AgentRunResult (reply included).
+   *  Live stream events for it are pushed separately under `streamId`. */
+  | { type: 'magic:ask'; request: string; streamId: string }
+  /** Toggle global background assistance from the magic popover; resolves with the stored state. */
+  | { type: 'magic:set-assistance'; active: boolean }
+  /** Replace site/workspace exclusions from the magic popover; resolves with the stored state. */
+  | { type: 'magic:set-exclusions'; excludedSites: string[]; excludedWorkspaceIds: string[] }
+  /** Undo a recorded reorganization by restoring its checkpoint's Before tabs. */
+  | { type: 'magic:undo'; checkpointId: string }
+  /** Apply the staged tab proposals shown in the agent switch notice. */
+  | { type: 'agent:apply-proposals'; proposals: AgentTabProposal[] }
+  /** Dismiss the agent switch notice (discarding any proposals). */
+  | { type: 'agent:dismiss-notice' }
+  /** Dismiss the workspace drift notice. */
+  | { type: 'drift:dismiss-notice' }
 
 /**
  * Floating shell UI that must paint above the native page view. Renderer DOM
@@ -66,6 +131,12 @@ export interface ShellOverlay {
   hideSurface(): void
   /** Register the shell-side handler for overlay actions. Returns an unsubscribe. */
   onAction(handler: (action: OverlayAction) => Promise<unknown>): () => void
+  /** Forward one live agent stream event to the overlay renderer (magic:ask streaming). */
+  pushMagicAgentEvent(streamId: string, event: AgentStreamEvent): void
+  /** Show/update (or clear, with null) the bottom-center agent switch notice above the page. */
+  showAgentNotice(notice: AgentSwitchNoticeState | null): void
+  /** Show (or clear, with null) the small bottom-right drift notice above the page. */
+  showDriftNotice(notice: WorkspaceDriftNoticeState | null): void
 }
 
 /** API exposed only to the overlay renderer. */
@@ -74,6 +145,12 @@ export interface OverlayHost {
   onSurface(handler: (req: SurfaceRequest | null) => void): () => void
   /** Ask the shell to perform an action; resolves with its result (e.g. a create error). */
   requestAction(action: OverlayAction): Promise<unknown>
+  /** Receive live agent stream events pushed by the shell. Returns an unsubscribe. */
+  onAgentEvent(handler: (streamId: string, event: AgentStreamEvent) => void): () => void
+  /** Receive agent switch notice updates pushed by the shell (null = hidden). Returns an unsubscribe. */
+  onAgentNotice(handler: (notice: AgentSwitchNoticeState | null) => void): () => void
+  /** Receive workspace drift notice updates pushed by the shell (null = hidden). Returns an unsubscribe. */
+  onDriftNotice(handler: (notice: WorkspaceDriftNoticeState | null) => void): () => void
   /** Hide this overlay immediately (the shell is also told via surface:close). */
   dismiss(kind: SurfaceKind): void
 }
@@ -91,7 +168,13 @@ export const OVERLAY_IPC = {
   actionRequest: 'overlay:action:request',
   actionResponse: 'overlay:action:response',
   /** overlay -> main: hide the overlay view now. */
-  dismiss: 'overlay:dismiss'
+  dismiss: 'overlay:dismiss',
+  /** shell -> main -> overlay renderer: one live agent stream event (magic:ask). */
+  agentEvent: 'overlay:agent-event',
+  /** shell -> main -> overlay renderer: current agent switch notice (null = none). */
+  agentNotice: 'overlay:agent-notice',
+  /** shell -> main -> overlay renderer: current workspace drift notice (null = none). */
+  driftNotice: 'overlay:drift-notice'
 } as const
 
 /** Top-left of a workspace dropdown panel for `anchor`, clamped into the window. */
@@ -109,5 +192,25 @@ export function menuPosition(
     x: Math.max(4, Math.min(Math.round(raw.x), Math.max(4, window.width - width - 4))),
     y: Math.max(4, Math.min(Math.round(raw.y), Math.max(4, window.height - size.height - 4))),
     width
+  }
+}
+
+export const MAGIC_POPOVER_WIDTH = 440
+
+/**
+ * Top-left of the compact magic popover for `anchor`: beside the icon,
+ * bottom-aligned with it (the icon sits near the window's bottom edge),
+ * clamped into the window.
+ */
+export function magicPopoverPosition(
+  anchor: Bounds,
+  size: { height: number },
+  window: { width: number; height: number }
+): { x: number; y: number; width: number } {
+  const raw = { x: anchor.x + anchor.width + 8, y: anchor.y + anchor.height - size.height }
+  return {
+    x: Math.max(4, Math.min(Math.round(raw.x), Math.max(4, window.width - MAGIC_POPOVER_WIDTH - 4))),
+    y: Math.max(4, Math.min(Math.round(raw.y), Math.max(4, window.height - size.height - 4))),
+    width: MAGIC_POPOVER_WIDTH
   }
 }

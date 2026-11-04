@@ -49,6 +49,20 @@ const runtime = createAgentRuntime() // AGENT_RUNTIME=eve, EVE_AGENT_URL=…
 const { reply, sessionId } = await runtime.send('Open example.com and summarize it')
 ```
 
+## Embedded mode: MagicPopover chatbox
+
+Every question submitted in the MagicPopover chatbox is sent to the agent:
+`MagicPopoverContent.onAsk` → (native overlay `magic:ask` action, or the
+sidebar fallback prop) → `App.askAgent` → `EmbeddedAgent.ask` (preload IPC
+`agent:ask`) → `EmbeddedAgentHost.ask`, which builds the prompt with
+`lib/chat.ts` (question + active workspace + open tabs, excluded sites
+stripped) and runs it through the `AgentRuntime`. The agent thinks, drives
+the browser with the `tools/` tools via the tool bridge, and its final
+reply is returned and shown in the popover transcript. Chat turns are
+serialized, continue one Eve session per window, time out after 120s
+(`MAGIC_AGENT_CHAT_TIMEOUT_MS`), and are not gated by background
+assistance (that toggle only stops unsolicited restructuring).
+
 ## Embedded mode: workspace switches
 
 Inside the Electron app the agent is embedded (`main/agent/host.ts`):

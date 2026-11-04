@@ -257,6 +257,11 @@ export class SqliteWorkspaceStore {
     }
   }
 
+  /** Quit the active workspace: forget the active id (no workspace is set); workspaces and tabs stay. */
+  clearActiveWorkspace(): void {
+    this.db.prepare("DELETE FROM app_state WHERE key = 'active_workspace_id'").run()
+  }
+
   saveTabSet(workspaceId: string, tabSet: PersistedTabSet): void {
     if (!this.db.prepare('SELECT id FROM workspaces WHERE id = ?').get(workspaceId)) {
       throw new Error(`No workspace with id ${workspaceId}`)
@@ -311,36 +316,86 @@ export class SqliteWorkspaceStore {
   }
 
   /**
-   * Update the existing singleton profile in place: only the display name
-   * (on `user_profile`) and the `description` setting change, in one
-   * transaction. The identity seed, goal, timestamps from onboarding, every
-   * other setting (including the canonical identity inputs behind the
-   * totem), and all workspaces are left untouched, so the totem and the
-   * rest of the app state survive an edit unchanged.
+   * Update the existing singleton profile in place: the display name (on
+   * `user_profile`) and the `description` setting change, in one
+   * transaction; when provided, the `goals`/`sites` settings change too and
+   * the profile goal follows the first goals entry (as at onboarding). The
+   * identity seed, timestamps from onboarding, every other setting
+   * (including the canonical identity inputs behind the totem), and all
+   * workspaces are left untouched, so the totem and the rest of the app
+   * state survive an edit unchanged.
    */
   updateProfile(input: UpdateProfileInput): CompletedOnboarding {
     const displayName = input.displayName?.trim()
     if (!displayName) throw new Error('Profile display name is required')
     const description = typeof input.description === 'string' ? input.description.trim() : ''
+    // Sanitise the optional goals/sites the same way onboarding does:
+    // trimmed, blanks dropped, sites de-duplicated case-insensitively.
+    const goals = Array.isArray(input.goals)
+      ? input.goals.flatMap((g) => {
+          const name = typeof g?.name === 'string' ? g.name.trim() : ''
+          return name ? [{ name, goal: typeof g?.goal === 'string' ? g.goal.trim() : '' }] : []
+        })
+      : undefined
+    const sites =
+      typeof input.sites === 'object' && input.sites !== null && !Array.isArray(input.sites)
+        ? Object.fromEntries(
+            Object.entries(input.sites).flatMap(([area, list]) => {
+              const name = area.trim()
+              if (!name || !Array.isArray(list)) return []
+              const seen = new Set<string>()
+              const clean = list.flatMap((s) => {
+                const site = typeof s === 'string' ? s.trim() : ''
+                if (!site || seen.has(site.toLowerCase())) return []
+                seen.add(site.toLowerCase())
+                return [site]
+              })
+              return clean.length > 0 ? [[name, clean] as const] : []
+            })
+          )
+        : undefined
     const now = Date.now()
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const result = this.db
-        .prepare('UPDATE user_profile SET display_name = ?, updated_at = ? WHERE id = 1')
-        .run(displayName, now)
+      const result =
+        goals !== undefined
+          ? this.db
+              .prepare('UPDATE user_profile SET display_name = ?, goal = ?, updated_at = ? WHERE id = 1')
+              .run(displayName, goals.find((g) => g.goal)?.goal ?? '', now)
+          : this.db.prepare('UPDATE user_profile SET display_name = ?, updated_at = ? WHERE id = 1').run(displayName, now)
       if (result.changes === 0) throw new Error('No profile to update')
-      this.db
-        .prepare(
-          `INSERT INTO app_settings (key, value, updated_at) VALUES ('description', ?, ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-        )
-        .run(JSON.stringify(description), now)
+      const setSetting = this.db.prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      setSetting.run('description', JSON.stringify(description), now)
+      if (goals !== undefined) {
+        setSetting.run('goals', JSON.stringify(goals), now)
+        setSetting.run('defaultGoal', JSON.stringify(goals.find((g) => g.goal)?.goal ?? ''), now)
+      }
+      if (sites !== undefined) setSetting.run('sites', JSON.stringify(sites), now)
       this.db.exec('COMMIT')
     } catch (e) {
       this.db.exec('ROLLBACK')
       throw e
     }
     return this.loadOnboarding()!
+  }
+
+  /** One app setting by key (JSON-decoded), or undefined when never set. */
+  getSetting(key: string): unknown {
+    const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as unknown as { value: string } | undefined
+    return row ? (JSON.parse(row.value) as unknown) : undefined
+  }
+
+  /** Upsert one app setting (stored JSON-encoded, like the onboarding settings). */
+  setSetting(key: string, value: unknown): void {
+    this.db
+      .prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(key, JSON.stringify(value), Date.now())
   }
 
   loadOnboarding(): CompletedOnboarding | null {

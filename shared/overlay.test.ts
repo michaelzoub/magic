@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { menuPosition, type SurfaceRequest } from './overlay'
+import { magicPopoverPosition, menuPosition, type SurfaceRequest } from './overlay'
 
 const menu = (placement: 'bottom-start' | 'right-start'): Extract<SurfaceRequest, { kind: 'workspace-menu' }> => ({
   kind: 'workspace-menu',
@@ -33,6 +33,20 @@ describe('menuPosition', () => {
     const pos = menuPosition(req, { width: 232, height: 200 }, { width: 1280, height: 820 })
     expect(pos.x + pos.width).toBeLessThanOrEqual(1280 - 4)
     expect(pos.y + 200).toBeLessThanOrEqual(820 - 4)
+  })
+})
+
+describe('magicPopoverPosition', () => {
+  it('opens beside the icon, bottom-aligned with it, at fixed width', () => {
+    const anchor = { x: 10, y: 760, width: 32, height: 28 }
+    expect(magicPopoverPosition(anchor, { height: 40 }, { width: 1280, height: 820 })).toEqual({ x: 50, y: 748, width: 440 })
+  })
+
+  it('clamps the panel inside the window', () => {
+    const anchor = { x: 1200, y: 20, width: 32, height: 28 }
+    const pos = magicPopoverPosition(anchor, { height: 40 }, { width: 1280, height: 820 })
+    expect(pos.x + pos.width).toBeLessThanOrEqual(1280 - 4)
+    expect(pos.y).toBeGreaterThanOrEqual(4)
   })
 })
 

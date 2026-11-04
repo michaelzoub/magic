@@ -159,7 +159,10 @@ export function buildIdentityExplanation(completed: CompletedOnboarding): Identi
     paletteName: report.spec.palette.name,
     patterns,
     symmetry: report.spec.symmetry === 'both' ? 'mirrored side to side and top to bottom' : 'mirrored side to side',
-    influences: report.influences.map(({ id, label, summary }) => ({ id, label, summary }))
+    // Display text only: summaries persisted by earlier versions joined
+    // goals with a decorative middle dot — normalise to a comma here so
+    // stored profiles render the same as newly generated ones.
+    influences: report.influences.map(({ id, label, summary }) => ({ id, label, summary: summary.replaceAll(' · ', ', ') }))
   }
 }
 

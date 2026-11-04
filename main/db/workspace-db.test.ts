@@ -104,6 +104,19 @@ describe('SqliteWorkspaceStore', () => {
     store.close()
   })
 
+  it('clearActiveWorkspace leaves no workspace set, keeping workspaces and tabs', () => {
+    const store = new SqliteWorkspaceStore(file)
+    store.upsertWorkspace(ws('personal', 'Personal'))
+    store.recordSwitch({ fromWorkspaceId: null, toWorkspaceId: 'personal', switchedAt: 1 })
+    store.saveTabSet('personal', { tabs: [{ id: 't1', url: 'https://example.com/', title: 'Example' }], activeTabId: 't1' })
+    store.clearActiveWorkspace()
+    const snap = store.loadSnapshot()!
+    expect(snap.activeWorkspaceId).toBeNull()
+    expect(snap.workspaces.map((w) => w.id)).toEqual(['personal'])
+    expect(snap.tabSets.personal.tabs).toHaveLength(1)
+    store.close()
+  })
+
   it('deletes a workspace with its tabs, clears a dangling active id, and rejects unknown ids', () => {
     const store = new SqliteWorkspaceStore(file)
     store.upsertWorkspace(ws('personal', 'Personal'))
@@ -236,6 +249,48 @@ describe('SqliteWorkspaceStore', () => {
     expect(reopened.settings.description).toBe('A mathematician and builder.')
     expect(reopened.profile.identitySeed).toBe('v1.00000008')
     expect(createIdentitySpec(reopened.profile.identitySeed!)).toEqual(totemBefore)
+    store.close()
+  })
+
+  it('updates goals and sites through the profile update, leaving the identity untouched', () => {
+    const store = new SqliteWorkspaceStore(file)
+    const done = store.completeOnboarding({
+      profile: { displayName: 'Ada', goal: 'Focus', identitySeed: 'v1.00000008' },
+      settings: {
+        description: 'A builder.',
+        goals: [{ name: 'Work', goal: 'Ship v2 For Work, sites include gmail.com.' }],
+        sites: { Work: ['gmail.com'] },
+        identityInputs: [{ id: 'name' }]
+      },
+      completedAt: 1000
+    })
+
+    const updated = store.updateProfile({
+      displayName: 'Ada',
+      description: 'A builder.',
+      goals: [
+        { name: ' Work ', goal: ' Ship v3 ' },
+        { name: 'Music', goal: 'Release an EP' },
+        { name: ' ', goal: 'dropped' }
+      ],
+      sites: { Work: [' gmail.com ', 'Gmail.com', 'notion.so'], Music: [] }
+    })
+    expect(updated.settings.goals).toEqual([
+      { name: 'Work', goal: 'Ship v3' },
+      { name: 'Music', goal: 'Release an EP' }
+    ])
+    expect(updated.settings.sites).toEqual({ Work: ['gmail.com', 'notion.so'] })
+    expect(updated.profile.goal).toBe('Ship v3')
+    expect(updated.settings.defaultGoal).toBe('Ship v3')
+    // Identity-defining state is preserved exactly.
+    expect(updated.profile.identitySeed).toBe(done.profile.identitySeed)
+    expect(updated.settings.identityInputs).toEqual([{ id: 'name' }])
+
+    // Omitting goals/sites leaves them unchanged.
+    const renamed = store.updateProfile({ displayName: 'Ada L.', description: 'A builder.' })
+    expect(renamed.settings.goals).toEqual(updated.settings.goals)
+    expect(renamed.settings.sites).toEqual(updated.settings.sites)
+    expect(renamed.profile.goal).toBe('Ship v3')
     store.close()
   })
 

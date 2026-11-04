@@ -34,9 +34,25 @@ function createMemoryPersistence(): OnboardingPersistence {
       if (!stored) throw new Error('No profile to update')
       const displayName = input.displayName.trim()
       if (!displayName) throw new Error('Profile display name is required')
+      // Mirror the SQLite store: goals/sites change only when provided, and
+      // the profile goal follows the first goals entry.
+      const goals = input.goals?.flatMap((g) => {
+        const name = g.name.trim()
+        return name ? [{ name, goal: g.goal.trim() }] : []
+      })
       stored = {
-        profile: { ...stored.profile, displayName, updatedAt: Date.now() },
-        settings: { ...stored.settings, description: input.description.trim() }
+        profile: {
+          ...stored.profile,
+          displayName,
+          ...(goals ? { goal: goals.find((g) => g.goal)?.goal ?? '' } : {}),
+          updatedAt: Date.now()
+        },
+        settings: {
+          ...stored.settings,
+          description: input.description.trim(),
+          ...(goals ? { goals, defaultGoal: goals.find((g) => g.goal)?.goal ?? '' } : {}),
+          ...(input.sites ? { sites: structuredClone(input.sites) } : {})
+        }
       }
       return structuredClone(stored)
     }

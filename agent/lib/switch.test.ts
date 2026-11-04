@@ -16,6 +16,7 @@ describe('buildWorkspaceSwitchPrompt', () => {
     expect(prompt).toContain('Jira — https://jira.example')
     expect(prompt).toContain('MDN — https://developer.mozilla.org')
     expect(prompt).toContain('list_tabs')
+    expect(prompt).toContain('Never ask the user a question')
   })
 
   it('handles a first workspace and missing goals', () => {

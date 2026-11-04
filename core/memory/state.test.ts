@@ -7,9 +7,10 @@ import {
   listCheckpoints,
   planWorkspaceSwitch,
   recordReorg,
-  restoreCheckpoint
+  restoreCheckpoint,
+  setCheckpointMeaning
 } from './state'
-import type { RecordReorgInput, SavedTab } from './types'
+import type { Checkpoint, RecordReorgInput, SavedTab } from './types'
 
 const tab = (id: string, title: string, url: string): SavedTab => ({ id, title, url })
 
@@ -75,6 +76,26 @@ describe('recordReorg', () => {
     const empty = createMemoryState()
     recordReorg(empty, reorg())
     expect(empty).toEqual({ checkpoints: [], transitions: new Map(), restoredCheckpointId: null })
+  })
+})
+
+describe('setCheckpointMeaning', () => {
+  it('applies the agent verdict without removing the checkpoint from history', () => {
+    const { state } = recordReorg(createMemoryState(), reorg())
+    expect(state.checkpoints[0].meaningful).toBe(false)
+    const judged = setCheckpointMeaning(state, 'c1', true, 'Coherent tab set left behind')
+    expect(judged.checkpoints[0]).toMatchObject({ meaningful: true, meaningfulReason: 'Coherent tab set left behind' })
+    expect(judged.checkpoints).toHaveLength(1)
+    expect(state.checkpoints[0].meaningful).toBe(false)
+    expect(() => setCheckpointMeaning(state, 'nope', true)).toThrow(/No checkpoint/)
+  })
+
+  it('defaults old persisted checkpoints without a verdict to not meaningful', () => {
+    const { state } = recordReorg(createMemoryState(), reorg())
+    const legacy = { ...state.checkpoints[0] } as Partial<Checkpoint>
+    delete legacy.meaningful
+    const normalized = createMemoryState({ checkpoints: [legacy as Checkpoint] })
+    expect(normalized.checkpoints[0].meaningful).toBe(false)
   })
 })
 

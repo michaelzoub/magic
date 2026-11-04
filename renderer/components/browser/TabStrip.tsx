@@ -251,10 +251,10 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew, onMove }
               if (s?.id === tab.id) s.active ? finish(s, true) : (sessionRef.current = null)
             }}
             style={isDragged ? { transform: `translateX(${sessionRef.current?.dx ?? 0}px)`, zIndex: 10 } : undefined}
-            className={`no-drag group relative flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 touch-none items-center gap-2 rounded-lg pl-3 pr-1 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-chrome-faint
-              ${isDragged ? 'cursor-grabbing shadow-[0_4px_16px_rgb(0_0_0/0.18),0_0_0_1px_rgb(var(--chrome-border)/0.10)]' : 'cursor-grab'}
+            className={`no-drag group relative flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 touch-none items-center gap-1.5 rounded-[6px] pl-2.5 pr-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-chrome-faint [&_svg]:size-3.5
+              ${isDragged ? 'cursor-grabbing shadow-[0_4px_16px_rgb(0_0_0/0.18)]' : 'cursor-grab'}
               ${active
-                ? 'bg-chrome-active text-chrome-text shadow-[0_0_0_1px_rgb(var(--chrome-border)/0.10),0_1px_2px_rgb(0_0_0/0.05)]'
+                ? 'bg-chrome-active text-chrome-text'
                 : 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text'} ${tab.isDiscarded ? 'opacity-60' : ''}`}
           >
             {tab.favicon ? (

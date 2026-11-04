@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode, SVGProps } from 'react'
 import { WorkspaceSwitchboard } from '@core/workspaces/switchboard'
+import { workspaceSwitchStats } from '@core/workspaces/switchStats'
 import type { WorkspaceTabSet, WorkspaceTabSwitch } from '@core/workspaces/types'
-import type { WorkspaceRecord } from '@shared/workspaces'
+import type { WorkspaceRecord, WorkspaceSwitchRecord } from '@shared/workspaces'
 import { workspacePersistence as persistence } from '../adapters/workspace-persistence'
 import { Briefcase, GradCap, Layers, User } from '@/components/ui/icons'
 
@@ -87,6 +88,7 @@ const save = (write: () => Promise<void>) => {
  */
 export function useWorkspaces() {
   const [board, setBoard] = useState(() => new WorkspaceSwitchboard<Workspace>(seed))
+  const [switches, setSwitches] = useState<WorkspaceSwitchRecord[]>([])
   const [ready, setReady] = useState(false)
   const [, setVersion] = useState(0)
   useEffect(() => board.subscribe(() => setVersion((v) => v + 1)), [board])
@@ -97,10 +99,17 @@ export function useWorkspaces() {
       .load()
       .then((snap) => {
         if (!live) return
+        // Snapshot switches are capped (100), which can under-count a busy
+        // week; fetch a deeper history for the switch stats.
+        void persistence
+          .listSwitches(10_000)
+          .then((all) => live && setSwitches(all))
+          .catch(() => {})
         if (!snap) {
           // First run: persist the seed so later selections/switches have rows to touch.
           for (const w of seed) save(() => persistence.upsertWorkspace(toRecord(w, false)))
         } else if (snap.workspaces.length > 0) {
+          setSwitches(snap.switches)
           const restoredWorkspaces = snap.workspaces.map((r) => {
             const w = fromRecord(r, snap.tabSets[r.id])
             const goal = seedGoalFor(r)
@@ -124,14 +133,17 @@ export function useWorkspaces() {
 
   /** Persist a switch: upsert the target first (FK target for the switch row), then record before → after. */
   const persistSwitch = useCallback((from: string | null, target: Workspace, current: WorkspaceTabSet) => {
+    const switchedAt = Date.now()
     save(async () => {
       await persistence.upsertWorkspace(toRecord(target, true))
       await persistence.recordSwitch({
         fromWorkspaceId: from,
         toWorkspaceId: target.id,
-        switchedAt: Date.now(),
+        switchedAt,
         ...(from ? { outgoingTabSet: current } : {})
       })
+      // Keep the in-memory history live so new-tab stats include this switch.
+      setSwitches((prev) => [...prev, { id: -switchedAt, fromWorkspaceId: from, toWorkspaceId: target.id, switchedAt }])
     })
   }, [])
 
@@ -195,11 +207,33 @@ export function useWorkspaces() {
       save(async () => {
         await persistence.deleteWorkspace(id)
         if (wasActive && next) {
+          const switchedAt = Date.now()
           await persistence.upsertWorkspace(toRecord(next, true))
-          await persistence.recordSwitch({ fromWorkspaceId: id, toWorkspaceId: next.id, switchedAt: Date.now() })
+          await persistence.recordSwitch({ fromWorkspaceId: id, toWorkspaceId: next.id, switchedAt })
+          setSwitches((prev) => [...prev, { id: -switchedAt, fromWorkspaceId: id, toWorkspaceId: next.id, switchedAt }])
         }
       })
       return { plan: replaceTabs, workspaceId: next?.id ?? null }
+    },
+    [board]
+  )
+
+  /**
+   * Quit the active workspace (e.g. goal drift): save its live tabs under
+   * it, then set no workspace active — in the board and in persistence, so
+   * it stays non-set across relaunch. Tabs stay open; nothing is recorded
+   * as a switch. Returns the workspace left, or null when none was active.
+   */
+  const quit = useCallback(
+    (current: WorkspaceTabSet): string | null => {
+      const left = board.deactivate(current)
+      if (left) {
+        save(async () => {
+          await persistence.saveTabSet(left, current)
+          await persistence.clearActiveWorkspace()
+        })
+      }
+      return left
     },
     [board]
   )
@@ -210,7 +244,20 @@ export function useWorkspaces() {
     [board]
   )
 
-  return { all: board.workspaces, list: board.listedWorkspaces, activeId: board.activeId, ready, getTabSet, select, create, deleteWorkspace, ensureAndSwitch }
+  return {
+    all: board.workspaces,
+    list: board.listedWorkspaces,
+    activeId: board.activeId,
+    ready,
+    /** Workspace-mode switches today / in the past 7 days, for new-tab stats. */
+    switchStats: workspaceSwitchStats(switches),
+    getTabSet,
+    quit,
+    select,
+    create,
+    deleteWorkspace,
+    ensureAndSwitch
+  }
 }
 
 export type UseWorkspaces = ReturnType<typeof useWorkspaces>

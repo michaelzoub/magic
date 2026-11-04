@@ -59,8 +59,8 @@ export function Tooltip({ label, wrap, shortcut, side = 'bottom', className = ''
         className={`pointer-events-none absolute z-50 ${surface} opacity-0
           transition-[opacity,transform] duration-100 ease-out group-hover/tip:opacity-100 ${place[side]}
           ${wrap
-            ? 'flex w-max max-w-[240px] items-center whitespace-normal rounded-[5px] px-2 py-1 text-[11px] font-medium leading-4'
-            : 'flex items-center gap-1.5 whitespace-nowrap rounded-[5px] px-2 py-1 text-[11px] font-medium leading-4'}`}
+            ? 'flex w-max max-w-[240px] items-center whitespace-normal rounded-[6px] px-2 py-1 text-2xs font-medium leading-4'
+            : 'flex items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2 py-1 text-2xs font-medium leading-4'}`}
       >
         {label}
         {shortcut && <kbd className="font-sans text-white/45">{shortcut}</kbd>}

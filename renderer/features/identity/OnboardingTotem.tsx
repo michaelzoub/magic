@@ -16,8 +16,8 @@ export function OnboardingTotemPreview({ data, progress }: { data: Readonly<Onbo
     <div className="flex items-center gap-3">
       <PixelTotem spec={spec} size={44} progress={progress} className="shrink-0 rounded-[8px]" />
       <div className="min-w-0">
-        <p className="text-[12px] font-medium text-white/85">Your Magic identity</p>
-        <p className="truncate text-[11px] text-white/40">
+        <p className="text-xs font-medium text-white/85">Your Magic identity</p>
+        <p className="truncate text-2xs text-white/40">
           {progress >= 1 ? `${spec.palette.name} — fully assembled` : 'Assembling as you answer…'}
         </p>
       </div>
@@ -31,16 +31,16 @@ export function OnboardingTotemReveal({ data }: { data: Readonly<OnboardingData>
   const spec = useMemo(() => identitySpecFromOnboarding(data), [key]) // eslint-disable-line react-hooks/exhaustive-deps
   const welcome = (data.welcome as { name?: string } | undefined)?.name?.trim()
   return (
-    <div className="flex flex-col items-center px-4 py-6 text-center">
+    <div className="flex flex-col items-center px-4 py-5 text-center">
       <RevealTotem spec={spec} />
-      <h3 className="mt-4 text-[20px] font-semibold tracking-tight">
+      <h3 className="mt-4 text-xl font-semibold tracking-tight">
         {welcome ? `Welcome, ${welcome}` : 'Welcome to Magic'}
       </h3>
-      <p className="mt-1.5 max-w-[300px] text-[13px] leading-relaxed text-white/50">
+      <p className="mt-1.5 max-w-[300px] text-sm leading-relaxed text-white/50">
         This pixel totem is your identity in Magic — generated from your answers, saved with your
         profile, and shown wherever your profile appears.
       </p>
-      <p className="mt-2 text-[11px] text-white/35">{spec.palette.name}</p>
+      <p className="mt-2 text-2xs text-white/35">{spec.palette.name}</p>
     </div>
   )
 }

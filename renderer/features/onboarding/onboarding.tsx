@@ -4,6 +4,7 @@ import type { CompletedOnboarding } from '@shared/onboarding'
 import { uiStep, type OnboardingStepProps } from '@/features/onboarding/OnboardingWizard'
 import { Check, Close, Globe, Pencil, Plus, User } from '@/components/ui/icons'
 import { Brand } from '@/components/ui/Brand'
+import { Button } from '@/components/ui/Button'
 import { completeOnboarding } from './completeOnboarding'
 
 /** Answers collected by the first step, saved under the `welcome` step id. */
@@ -13,7 +14,7 @@ export interface WelcomeAnswers {
 }
 
 const field =
-  'w-full rounded-[10px] border border-white/10 bg-white/[0.05] py-2.5 pl-9 pr-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/30 focus:border-white/25 focus:bg-white/[0.08]'
+  'w-full rounded-[6px] bg-white/[0.05] py-1.5 pl-9 pr-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:bg-white/[0.08] focus:ring-1 focus:ring-white/40'
 
 function WelcomeStep({ value, setValue }: OnboardingStepProps<WelcomeAnswers>) {
   const answers = value ?? { name: '', description: '' }
@@ -21,8 +22,8 @@ function WelcomeStep({ value, setValue }: OnboardingStepProps<WelcomeAnswers>) {
   return (
     <div className="relative">
       <Brand size={22} className="mb-4 text-white" />
-      <h3 className="pr-8 text-[20px] font-semibold leading-snug tracking-tight">Hey there! Welcome to Magic!</h3>
-      <p className="mt-1.5 text-[13px] text-white/50">To get started, what would you like to be referred to as?</p>
+      <h3 className="pr-8 text-xl font-semibold leading-snug tracking-tight">Hey there! Welcome to Magic!</h3>
+      <p className="mt-1.5 text-sm text-white/50">To get started, what would you like to be referred to as?</p>
 
       <div className="relative mt-3">
         <User className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
@@ -36,7 +37,7 @@ function WelcomeStep({ value, setValue }: OnboardingStepProps<WelcomeAnswers>) {
         />
       </div>
 
-      <label className="mt-5 block text-[15px] font-semibold tracking-tight" htmlFor="onboarding-description">
+      <label className="mt-5 block text-lg font-semibold tracking-tight" htmlFor="onboarding-description">
         What best describes you in one sentence?
       </label>
       <div className="relative mt-3">
@@ -132,10 +133,10 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
 
   return (
     <div>
-      <h3 className="text-[20px] font-semibold leading-snug tracking-tight">
+      <h3 className="text-xl font-semibold leading-snug tracking-tight">
         {name ? `${name}, what` : 'What'} will you use Magic for?
       </h3>
-      <p className="mt-1.5 text-[13px] text-white/50">Pick all that apply. Presets already have a goal — you can fine-tune the wording in the next step.</p>
+      <p className="mt-1.5 text-sm text-white/50">Pick all that apply. Presets already have a goal — you can fine-tune the wording in the next step.</p>
 
       <div className="mt-3 flex flex-col gap-1.5">
         {answers.options.map((area) => {
@@ -144,8 +145,8 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
           return (
             <div
               key={area}
-              className={`rounded-[10px] border transition-colors ${
-                selection ? 'border-white/25 bg-white/[0.08]' : 'border-white/10 bg-white/[0.04]'
+              className={`rounded-[6px] transition-colors ${
+                selection ? 'bg-white/[0.10]' : 'bg-white/[0.04] hover:bg-white/[0.06]'
               }`}
             >
               <div className="flex items-center">
@@ -154,16 +155,16 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
                   role="checkbox"
                   aria-checked={!!selection}
                   onClick={() => toggle(area)}
-                  className="flex flex-1 items-center gap-2.5 px-3 py-2.5 text-left"
+                  className="flex flex-1 items-center gap-2 px-2.5 py-2 text-left"
                 >
                   <span
-                    className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border transition-colors ${
-                      selection ? 'border-white bg-white text-black' : 'border-white/30 text-transparent'
+                    className={`grid h-4 w-4 shrink-0 place-items-center rounded-[6px] transition-colors ${
+                      selection ? 'bg-white text-black' : 'bg-white/[0.15] text-transparent'
                     }`}
                   >
                     <Check width={12} height={12} />
                   </span>
-                  <span className="text-[13px] font-medium">{area}</span>
+                  <span className="text-sm font-medium">{area}</span>
                 </button>
                 {custom && (
                   <button
@@ -180,12 +181,12 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
                 <div className="px-3 pb-3 pl-[43px]">
                   {PRESET_GOALS[area] ? (
                     <>
-                      <p className="text-[11px] font-medium text-white/45">Goal</p>
-                      <p className="mt-1 text-[13px] leading-relaxed text-white/75">{PRESET_GOALS[area]}</p>
+                      <p className="text-2xs font-medium text-white/45">Goal</p>
+                      <p className="mt-1 text-sm leading-relaxed text-white/75">{PRESET_GOALS[area]}</p>
                     </>
                   ) : (
                     <>
-                      <label className="block text-[11px] font-medium text-white/45" htmlFor={`goal-${area}`}>
+                      <label className="block text-2xs font-medium text-white/45" htmlFor={`goal-${area}`}>
                         Goal for {area}
                       </label>
                       <input
@@ -194,12 +195,12 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
                         value={selection.goal}
                         onInput={(e) => setGoal(area, e.currentTarget.value)}
                         placeholder={`e.g. My goal for ${area.toLowerCase()}`}
-                        className="mt-1.5 w-full rounded-[8px] border border-white/10 bg-black/20 px-2.5 py-2 text-[13px] outline-none placeholder:text-white/30 focus:border-white/25 focus:bg-black/30"
+                        className="mt-1.5 w-full rounded-[6px] bg-black/20 px-2 py-1.5 text-sm outline-none placeholder:text-white/30 focus:bg-black/30 focus:ring-1 focus:ring-white/40"
                       />
                     </>
                   )}
                   {SUGGESTED_SITES[area] && (
-                    <p className="mt-2 flex items-center gap-1.5 text-[11px] text-white/35">
+                    <p className="mt-2 flex items-center gap-1.5 text-2xs text-white/35">
                       <Globe width={12} height={12} className="shrink-0" />
                       <span>
                         Example sites: {SUGGESTED_SITES[area].join(', ')}
@@ -222,17 +223,12 @@ function GoalsStep({ value, setValue, data }: OnboardingStepProps<GoalsAnswers>)
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addArea())}
             placeholder="Add your own — e.g. Music, Fitness, Family"
             aria-label="Add your own area"
-            className="w-full rounded-[10px] border border-dashed border-white/15 bg-transparent py-2.5 pl-8 pr-3 text-[13px] outline-none placeholder:text-white/30 focus:border-white/30 focus:bg-white/[0.04]"
+            className="w-full rounded-[6px] bg-white/[0.03] py-1.5 pl-8 pr-2.5 text-sm outline-none placeholder:text-white/30 focus:bg-white/[0.06] focus:ring-1 focus:ring-white/40"
           />
         </div>
-        <button
-          type="button"
-          disabled={!newArea.trim()}
-          onClick={addArea}
-          className="no-drag shrink-0 rounded-[10px] bg-white/[0.08] px-3 text-[12px] font-medium transition-colors hover:bg-white/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
-        >
+        <Button disabled={!newArea.trim()} onClick={addArea} className="self-center">
           Add
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -286,13 +282,13 @@ function WorkspaceSitesCard({
     setNewSite('')
   }
   const inputCls =
-    'w-full rounded-[8px] border border-white/10 bg-black/20 py-2 pl-8 pr-3 text-[13px] outline-none placeholder:text-white/30 focus:border-white/25 focus:bg-black/30'
+    'w-full rounded-[6px] bg-black/20 py-1.5 pl-8 pr-2.5 text-sm outline-none placeholder:text-white/30 focus:bg-black/30 focus:ring-1 focus:ring-white/40'
   return (
-    <section className="rounded-[10px] border border-white/10 bg-white/[0.04] px-3 py-3">
-      <h4 className="text-[14px] font-semibold tracking-tight">{selection.name}</h4>
-      <p className="mt-0.5 text-[12px] text-white/45">{selection.goal}</p>
+    <section className="rounded-[6px] bg-white/[0.04] px-2.5 py-2.5">
+      <h4 className="text-base font-semibold tracking-tight">{selection.name}</h4>
+      <p className="mt-0.5 text-xs text-white/45">{selection.goal}</p>
 
-      <p className="mt-3 text-[11px] font-medium text-white/45">Example websites for {selection.name}</p>
+      <p className="mt-3 text-2xs font-medium text-white/45">Example websites for {selection.name}</p>
       <div className="mt-1.5 flex flex-col gap-1.5">
         {sites.map((site, i) => (
           <div key={i} className="flex items-center gap-1.5">
@@ -310,7 +306,7 @@ function WorkspaceSitesCard({
               type="button"
               aria-label={`Remove ${site || 'website'} from ${selection.name}`}
               onClick={() => onSitesChange(sites.filter((_, j) => j !== i))}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="grid h-6 w-6 shrink-0 place-items-center self-center rounded-[6px] text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
               <Close width={12} height={12} />
             </button>
@@ -325,21 +321,16 @@ function WorkspaceSitesCard({
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSite())}
               placeholder="Add a website — e.g. example.com"
               aria-label={`Add a website for ${selection.name}`}
-              className={`${inputCls} border-dashed bg-transparent focus:bg-white/[0.04]`}
+              className={`${inputCls} bg-white/[0.03] focus:bg-white/[0.06]`}
             />
           </div>
-          <button
-            type="button"
-            disabled={!newSite.trim()}
-            onClick={addSite}
-            className="no-drag shrink-0 rounded-[8px] bg-white/[0.08] px-3 text-[12px] font-medium transition-colors hover:bg-white/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <Button disabled={!newSite.trim()} onClick={addSite} className="self-center">
             Add
-          </button>
+          </Button>
         </div>
       </div>
 
-      <label className="mt-3 block text-[11px] font-medium text-white/45" htmlFor={`goal-text-${selection.name}`}>
+      <label className="mt-3 block text-2xs font-medium text-white/45" htmlFor={`goal-text-${selection.name}`}>
         Goal text
       </label>
       <textarea
@@ -348,9 +339,9 @@ function WorkspaceSitesCard({
         value={goalText}
         onInput={(e) => onGoalTextChange(e.currentTarget.value)}
         aria-describedby={`goal-text-note-${selection.name}`}
-        className="mt-1.5 w-full resize-none rounded-[8px] border border-white/10 bg-black/20 px-2.5 py-2 text-[12px] leading-relaxed outline-none placeholder:text-white/30 focus:border-white/25 focus:bg-black/30"
+        className="mt-1.5 w-full resize-none rounded-[6px] bg-black/20 px-2 py-1.5 text-xs leading-relaxed outline-none placeholder:text-white/30 focus:bg-black/30 focus:ring-1 focus:ring-white/40"
       />
-      <p id={`goal-text-note-${selection.name}`} className="mt-1 text-[11px] text-white/35">
+      <p id={`goal-text-note-${selection.name}`} className="mt-1 text-2xs text-white/35">
         This is the workspace’s actual goal — edit it here. Editing the sites above rebuilds it from the goal + sites.
       </p>
     </section>
@@ -381,8 +372,8 @@ function SitesStep({ value, setValue, data }: OnboardingStepProps<SitesAnswers>)
 
   return (
     <div>
-      <h3 className="text-[20px] font-semibold leading-snug tracking-tight">Where do you do each of these?</h3>
-      <p className="mt-1.5 text-[13px] text-white/50">
+      <h3 className="text-xl font-semibold leading-snug tracking-tight">Where do you do each of these?</h3>
+      <p className="mt-1.5 text-sm text-white/50">
         Add example websites for each workspace. They’re added to its goal text, so Magic knows where it happens.
       </p>
       <div className="mt-3 flex flex-col gap-2">
@@ -406,7 +397,7 @@ function SitesStep({ value, setValue, data }: OnboardingStepProps<SitesAnswers>)
           )
         })}
       </div>
-      {selected.length === 0 && <p className="mt-3 text-[13px] text-white/50">Go back and pick at least one area first.</p>}
+      {selected.length === 0 && <p className="mt-3 text-sm text-white/50">Go back and pick at least one area first.</p>}
     </div>
   )
 }

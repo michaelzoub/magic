@@ -1,6 +1,7 @@
 import { BrowserWindow, WebContentsView } from 'electron'
 import { join } from 'node:path'
-import { OVERLAY_IPC, type SurfaceRequest } from '@shared/overlay'
+import { OVERLAY_IPC, type SurfaceRequest, type WorkspaceDriftNoticeState } from '@shared/overlay'
+import type { AgentSwitchNoticeState } from '@shared/agent'
 
 /**
  * Native layer for dialogs and dropdowns: one transparent WebContentsView
@@ -18,6 +19,8 @@ export class FloatingOverlay {
     }
   })
   private current: SurfaceRequest | null = null
+  private notice: AgentSwitchNoticeState | null = null
+  private drift: WorkspaceDriftNoticeState | null = null
   private ready = false
 
   constructor(private window: BrowserWindow) {
@@ -26,6 +29,8 @@ export class FloatingOverlay {
     wc.once('did-finish-load', () => {
       this.ready = true
       if (this.current) wc.send(OVERLAY_IPC.surface, this.current)
+      if (this.notice) wc.send(OVERLAY_IPC.agentNotice, this.notice)
+      if (this.drift) wc.send(OVERLAY_IPC.driftNotice, this.drift)
     })
     if (process.env.ELECTRON_RENDERER_URL) void wc.loadURL(`${process.env.ELECTRON_RENDERER_URL}/overlay.html`)
     else void wc.loadFile(join(__dirname, '../renderer/overlay.html'))
@@ -37,7 +42,43 @@ export class FloatingOverlay {
   }
 
   get isVisible(): boolean {
-    return this.current !== null
+    return this.current !== null || this.notice !== null || this.drift !== null
+  }
+
+  /** Show/update the agent switch notice; independent of any open surface. */
+  showAgentNotice(notice: AgentSwitchNoticeState | null): void {
+    this.notice = notice
+    if (notice) {
+      this.layout()
+      if (!this.window.isDestroyed() && !this.window.contentView.children.includes(this.view)) {
+        this.window.contentView.addChildView(this.view)
+      } else {
+        this.raise()
+      }
+    } else if (!this.current && !this.drift && !this.window.isDestroyed() && this.window.contentView.children.includes(this.view)) {
+      this.window.contentView.removeChildView(this.view)
+    }
+    if (this.ready && !this.view.webContents.isDestroyed()) {
+      this.view.webContents.send(OVERLAY_IPC.agentNotice, notice)
+    }
+  }
+
+  /** Show/clear the small drift notice; independent of any open surface or agent notice. */
+  showDriftNotice(notice: WorkspaceDriftNoticeState | null): void {
+    this.drift = notice
+    if (notice) {
+      this.layout()
+      if (!this.window.isDestroyed() && !this.window.contentView.children.includes(this.view)) {
+        this.window.contentView.addChildView(this.view)
+      } else {
+        this.raise()
+      }
+    } else if (!this.current && !this.notice && !this.window.isDestroyed() && this.window.contentView.children.includes(this.view)) {
+      this.window.contentView.removeChildView(this.view)
+    }
+    if (this.ready && !this.view.webContents.isDestroyed()) {
+      this.view.webContents.send(OVERLAY_IPC.driftNotice, notice)
+    }
   }
 
   show(req: SurfaceRequest): void {
@@ -65,7 +106,9 @@ export class FloatingOverlay {
     console.log('[overlay] hide', new Error().stack?.split('\n').slice(2,5).join(' | '))
     this.current = null
     if (!this.view.webContents.isDestroyed()) this.view.webContents.send(OVERLAY_IPC.surface, null)
-    if (!this.window.isDestroyed() && this.window.contentView.children.includes(this.view)) {
+    // The agent/drift notices keep the layer attached on their own.
+    if (this.notice || this.drift) this.layout()
+    if (!this.notice && !this.drift && !this.window.isDestroyed() && this.window.contentView.children.includes(this.view)) {
       this.window.contentView.removeChildView(this.view)
     }
     if (!this.window.isDestroyed()) this.window.webContents.focus()
@@ -73,7 +116,7 @@ export class FloatingOverlay {
 
   /** Keep the overlay above page views that were (re)attached after it. */
   raise(): void {
-    if (!this.current || this.window.isDestroyed()) return
+    if ((!this.current && !this.notice && !this.drift) || this.window.isDestroyed()) return
     if (this.window.contentView.children.includes(this.view)) {
       this.window.contentView.removeChildView(this.view)
       this.window.contentView.addChildView(this.view)
@@ -83,7 +126,22 @@ export class FloatingOverlay {
   private layout(): void {
     if (this.window.isDestroyed()) return
     const [width, height] = this.window.getContentSize()
-    this.view.setBounds({ x: 0, y: 0, width, height })
+    if (this.current) {
+      this.view.setBounds({ x: 0, y: 0, width, height })
+    } else if (this.notice) {
+      // Notice-only: keep the layer confined to the bottom-center dock
+      // sheet area so the rest of the window stays clickable through it.
+      const w = Math.min(496, width)
+      const h = Math.min(520, height)
+      this.view.setBounds({ x: Math.max(0, Math.round((width - w) / 2)), y: Math.max(0, height - h), width: w, height: h })
+    } else if (this.drift) {
+      // Drift-only: confine the layer to the bottom-right corner.
+      const w = Math.min(304, width)
+      const h = Math.min(96, height)
+      this.view.setBounds({ x: Math.max(0, width - w), y: Math.max(0, height - h), width: w, height: h })
+    } else {
+      this.view.setBounds({ x: 0, y: 0, width, height })
+    }
   }
 
   dispose(): void {

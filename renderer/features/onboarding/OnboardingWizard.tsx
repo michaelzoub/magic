@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { OnboardingStep } from '@core/onboarding'
 import type { OnboardingData, OnboardingFlow } from '@core/onboarding'
-import { Dialog } from '@/components/ui'
+import { Button, Dialog } from '@/components/ui'
 
 /** Props every custom step UI receives. */
 export interface OnboardingStepProps<TValue = unknown> {
@@ -26,9 +26,6 @@ export function uiStep<TValue>(definition: {
 }): OnboardingStep<TValue, OnboardingStepComponent<TValue>> {
   return new OnboardingStep<TValue, OnboardingStepComponent<TValue>>(definition)
 }
-
-const btn =
-  'no-drag h-8 rounded-[6px] px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40'
 
 /**
  * Renders an {@link OnboardingFlow}: the current step's custom UI, a
@@ -86,9 +83,9 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
       <Dialog open={open} onClose={finish} label={title} hideHeader>
         {renderCompletion(flow.collectedData)}
         <footer className="flex items-center justify-center px-4 pb-4">
-          <button type="button" onClick={finish} className={`${btn} bg-white text-black hover:bg-white/85`}>
+          <Button variant="primary" size="md" onClick={finish}>
             Enter Magic
-          </button>
+          </Button>
         </footer>
       </Dialog>
     )
@@ -97,7 +94,7 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
   return (
     <Dialog open={open} onClose={onClose} label={title} hideHeader>
       <div className="px-4 pb-2 pt-4">
-        <div className="flex items-center justify-between text-[11px] text-white/40">
+        <div className="flex items-center justify-between text-2xs text-white/40">
           <span>{step?.title ?? ''}</span>
           <span>Step {current} of {total}</span>
         </div>
@@ -117,28 +114,28 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
             flow={flow}
           />
         ) : (
-          <p className="text-[12px] text-white/50">This step has no UI.</p>
+          <p className="text-xs text-white/50">This step has no UI.</p>
         )}
       </div>
 
       {flow.error && (
-        <p role="alert" className="px-4 pb-1 text-[12px] text-red-300">{flow.error}</p>
+        <p role="alert" className="px-4 pb-1 text-xs text-red-300">{flow.error}</p>
       )}
 
       <footer className="flex items-center gap-2 px-4 pb-4 pt-2">
         <span className="flex-1" />
         {flow.isFirst ? (
-          <button type="button" disabled={saving} onClick={onClose} className={`${btn} border border-white/15 text-white/80 hover:bg-white/[0.08] hover:text-white`}>
+          <Button variant="secondary" disabled={saving} onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         ) : (
-          <button type="button" disabled={saving} onClick={() => flow.back()} className={`${btn} bg-white/[0.08] text-white hover:bg-white/[0.14]`}>
+          <Button variant="secondary" disabled={saving} onClick={() => flow.back()}>
             Back
-          </button>
+          </Button>
         )}
-        <button type="button" disabled={saving} onClick={() => void advance()} className={`${btn} bg-white text-black hover:bg-white/85`}>
+        <Button variant="primary" size="md" disabled={saving} onClick={() => void advance()}>
           {saving ? 'Saving…' : flow.isLast ? 'Save' : 'Continue →'}
-        </button>
+        </Button>
       </footer>
     </Dialog>
   )

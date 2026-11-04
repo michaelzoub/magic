@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { TabState } from '@shared/engine'
 import type { Checkpoint } from '@core/memory'
 import { engine } from '@/adapters'
 import { motion } from '@/motion'
 import { ResumePrompt } from './ResumePrompt'
+import { NewTabPage, type NewTabRecentItem } from './NewTabPage'
 
 /**
  * Reserves the page area. The engine renders the native page surface over
@@ -14,7 +15,7 @@ import { ResumePrompt } from './ResumePrompt'
  * above the page view. The page therefore stays live and attached at all
  * times — no detaching, and no screenshot painted in its place.
  */
-export function Viewport({ tab, resume, onResume }: {
+export function Viewport({ tab, resume, onResume, workspaceName, switchStats, recent, onNavigate, onOpenRecent, onViewAll }: {
   tab: TabState | null
   /**
    * Most recent workspace switch, offered only as a startup recovery
@@ -23,8 +24,31 @@ export function Viewport({ tab, resume, onResume }: {
    */
   resume?: Checkpoint | null
   onResume?(): void
+  /** Active workspace name, shown under the new-tab search box ("In …"). */
+  workspaceName?: string | null
+  /** Workspace switch counts shown as stats on the new-tab page. */
+  switchStats?: { today: number; pastWeek: number }
+  /** Recently used tabs in the active workspace, as new-tab chips. */
+  recent?: NewTabRecentItem[]
+  onNavigate?(input: string): void
+  onOpenRecent?(item: NewTabRecentItem): void
+  onViewAll?(): void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  // Dismissing the startup recovery prompt ("Not now") swaps in the
+  // new-tab page for that checkpoint, instead of a dead-end hint.
+  const [dismissedResumeId, setDismissedResumeId] = useState<string | null>(null)
+  const showResume = Boolean(resume && onResume && dismissedResumeId !== resume.id)
+  const newTabPage = (
+    <NewTabPage
+      workspaceName={workspaceName}
+      switchStats={switchStats}
+      recent={recent ?? []}
+      onNavigate={(input) => onNavigate?.(input)}
+      onOpenRecent={(item) => onOpenRecent?.(item)}
+      onViewAll={() => onViewAll?.()}
+    />
+  )
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -52,11 +76,13 @@ export function Viewport({ tab, resume, onResume }: {
       className="relative flex-1 overflow-hidden bg-chrome-panel"
     >
       {!tab?.url && (
-        <div ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.fadeIn(el, 0.05) } }} className="absolute inset-0 grid place-items-center overflow-y-auto p-6">
-          {resume && onResume ? (
-            <ResumePrompt checkpoint={resume} onResume={onResume} />
+        <div ref={(el) => { if (el && !el.dataset.in) { el.dataset.in = '1'; motion.fadeIn(el, 0.05) } }} className="absolute inset-0 overflow-y-auto">
+          {showResume && resume && onResume ? (
+            <div className="grid min-h-full place-items-center p-6">
+              <ResumePrompt checkpoint={resume} onResume={onResume} onDismissed={() => setDismissedResumeId(resume.id)} />
+            </div>
           ) : (
-            <p className="text-xs text-chrome-faint">Enter an address to begin</p>
+            newTabPage
           )}
         </div>
       )}

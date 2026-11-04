@@ -67,6 +67,9 @@ function createMemoryPersistence(): WorkspacePersistence {
       if (!workspaces.has(workspaceId)) throw new Error(`No workspace with id ${workspaceId}`)
       tabSets[workspaceId] = structuredClone(tabSet)
     },
+    async clearActiveWorkspace() {
+      activeWorkspaceId = null
+    },
     async listSwitches(limit = 100) {
       return [...switches].reverse().slice(0, limit)
     }
