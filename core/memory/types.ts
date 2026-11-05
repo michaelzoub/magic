@@ -34,7 +34,7 @@ export type SavedTab = Pick<TabState, 'id' | 'url' | 'title' | 'favicon'>
 /**
  * A labelled set of open tabs at one moment. Shown as a tag in the Memory
  * dialog: `title` is the headline tag, `tags` are the per-tab title/URL
- * chips underneath it (e.g. "Spotify — …", "github.com/…").
+ * chips underneath it (e.g. "Spotify - Chill Mix", "github.com/user").
  */
 export interface TabSnapshot {
   id: SnapshotId | FocusModeId

@@ -1,6 +1,6 @@
 import type { TabId, Unsubscribe, WorkspaceId, WorkspaceTab, WorkspaceTabSet, WorkspaceTabSwitch } from './types'
 
-/** Minimal shape the switchboard needs; UI layers may attach more (icons…). */
+/** Minimal shape the switchboard needs; UI layers may attach more (icons). */
 export interface SwitchableWorkspace {
   id: WorkspaceId
   name: string

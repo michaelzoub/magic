@@ -17,8 +17,8 @@ export function OnboardingTotemPreview({ data, progress }: { data: Readonly<Onbo
       <PixelTotem spec={spec} size={44} progress={progress} className="shrink-0 rounded-[8px]" />
       <div className="min-w-0">
         <p className="text-xs font-medium text-white/85">Your Magic identity</p>
-        <p className="truncate text-2xs text-white/40">
-          {progress >= 1 ? `${spec.palette.name} — fully assembled` : 'Assembling as you answer…'}
+        <p className="overflow-hidden whitespace-nowrap text-clip text-2xs text-white/40">
+          {progress >= 1 ? `${spec.palette.name} — fully assembled` : 'Assembling as you answer'}
         </p>
       </div>
     </div>

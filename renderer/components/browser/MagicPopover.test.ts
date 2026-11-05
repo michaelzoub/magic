@@ -89,8 +89,8 @@ describe('Magic chat', () => {
   })
 
   it('keeps the thinking state subtle, with a shimmer on the label', () => {
-    expect(src).not.toContain('Magic is thinking…')
-    expect(src).toContain("'Thinking…'")
+    expect(src).not.toContain('Magic is thinking')
+    expect(src).toContain("'Thinking'")
     expect(src).toContain('thinking-shimmer text-sm')
     const css = readFileSync(new URL('../../index.css', import.meta.url), 'utf8')
     expect(css).toContain('@keyframes thinking-shimmer')

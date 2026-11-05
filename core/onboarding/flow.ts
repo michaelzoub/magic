@@ -2,7 +2,7 @@ import { OnboardingStep } from './step'
 import type { OnboardingData, OnboardingProgress, OnboardingSaveHandler, OnboardingStatus } from './types'
 
 export interface OnboardingFlowOptions {
-  /** Saves all collected data at the end. Injected — localStorage, IPC, HTTP… */
+  /** Saves all collected data at the end. Injected — localStorage, IPC, HTTP */
   onSave: OnboardingSaveHandler
   initialData?: OnboardingData
 }

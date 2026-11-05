@@ -12,7 +12,7 @@ import type {
 } from './types'
 
 /**
- * Persistence port. Implementations live outside core (file, IndexedDB…).
+ * Persistence port. Implementations live outside core (file, IndexedDB).
  * Must round-trip the state as-is, preserving each workspace's `sites` map.
  */
 export interface BrowserStorage {

@@ -5,7 +5,7 @@
  *
  * Enforcement: components in this folder must compose `surface` instead of
  * setting their own background, and new features must import these
- * components (Popover, Dialog, Tooltip, MenuItem…) rather than rolling
+ * components (Popover, Dialog, Tooltip, MenuItem) rather than rolling
  * their own floating UI. Checked by `surface.test.ts`.
  */
 export const surface =

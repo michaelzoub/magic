@@ -110,8 +110,8 @@ export function ResumePrompt({ checkpoint, onResume, onDismissed }: {
                   <Globe className="h-4 w-4 shrink-0 text-white/40" />
                 )}
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-xs text-white/90">{t.title || hostOf(t.url)}</span>
-                  <span className="truncate text-2xs text-white/35">{hostOf(t.url)}</span>
+                  <span className="overflow-hidden whitespace-nowrap text-clip text-xs text-white/90">{t.title || hostOf(t.url)}</span>
+                  <span className="overflow-hidden whitespace-nowrap text-clip text-2xs text-white/35">{hostOf(t.url)}</span>
                 </span>
               </li>
             ))}

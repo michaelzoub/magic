@@ -8,7 +8,7 @@ describe('describeAgentEvent', () => {
     expect(describeAgentEvent({ type: 'tool-call', id: '3', name: 'close_tab', input: { tabId: 'x' } })).toBe('Proposing to close a tab')
     expect(describeAgentEvent({ type: 'tool-result', id: '2', name: 'open_tab', outcome: 'completed' })).toBeNull()
     expect(describeAgentEvent({ type: 'tool-result', id: '2', name: 'open_tab', outcome: 'failed', error: 'nope' })).toContain('failed')
-    expect(describeAgentEvent({ type: 'text-delta', text: 'thinking…' })).toBeNull()
+    expect(describeAgentEvent({ type: 'text-delta', text: 'thinking' })).toBeNull()
     expect(describeAgentEvent({ type: 'tool-call', id: '4', name: 'switch_tab', input: { tabId: 'x' } })).toBeNull()
   })
 })

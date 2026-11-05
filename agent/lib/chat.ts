@@ -12,7 +12,7 @@ export function buildAgentChatPrompt(question: string, context: AgentChatContext
   const workspace = context.workspace
   const lines = [
     'The user is asking you a question from the Magic chatbox. Answer it, using your browser tools (list/open/switch tabs, navigate, read page content, query/click/type) whenever the task needs the browser — do not guess at page contents.',
-    'Never ask the user a question — no clarifying, confirmation, or follow-up questions, including ending with "Want me to…?". Just execute: make the most reasonable assumption and do the task. If what the user refers to is not in the open tabs, search for it and open relevant tabs yourself instead of asking whether to.',
+    'Never use an ellipsis (three dots) in your reply. Never ask the user a question — no clarifying, confirmation, or follow-up questions, including ending with "Want me to do that?". Just execute: make the most reasonable assumption and do the task. If what the user refers to is not in the open tabs, search for it and open relevant tabs yourself instead of asking whether to.',
     '',
     workspace
       ? `Active workspace: "${workspace.name}" (id: ${workspace.id})\nGoal: ${workspace.goal.trim() || '(no goal set)'}`
@@ -22,7 +22,7 @@ export function buildAgentChatPrompt(question: string, context: AgentChatContext
     lines.push('Tabs open in the active workspace: (none)')
   } else {
     const tabs = context.tabs.slice(0, MAX_TABS_LISTED).map((t) => `- ${t.title.trim() || '(untitled)'} — ${t.url}`)
-    if (context.tabs.length > MAX_TABS_LISTED) tabs.push(`- …and ${context.tabs.length - MAX_TABS_LISTED} more`)
+    if (context.tabs.length > MAX_TABS_LISTED) tabs.push(`- and ${context.tabs.length - MAX_TABS_LISTED} more`)
     lines.push(`Tabs open in the active workspace:\n${tabs.join('\n')}`)
   }
   lines.push(

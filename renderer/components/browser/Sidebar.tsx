@@ -23,7 +23,7 @@ import { PixelTotem } from '@/features/identity'
  * it follows every frame (its ResizeObserver keeps the native page view
  * glued to the moving edge), instead of both jumping in a single frame.
  * Labels are the only clipped element, and they are sequenced, not
- * truncated: they unmount the instant a collapse starts, and on expand
+ * cut off: they unmount the instant a collapse starts, and on expand
  * they mount only once the panel is nearly full width (see below).
  *
  * Alignment: every entry (toggle, brand, nav rows, section header,
@@ -70,7 +70,7 @@ function RailButton({ label, open, count, onClick, children }: { label: string; 
       className={`${sidebarRow} text-chrome-text/75`}
     >
       <IconSlot>{children}</IconSlot>
-      {open && <span className="truncate">{label}</span>}
+      {open && <span className="overflow-hidden whitespace-nowrap text-clip">{label}</span>}
       {open && count !== undefined && <CountBadge count={count} />}
     </button>
   )
@@ -194,7 +194,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
   widthChangeRef.current = onWidthChange
   // Labels visible in the current frame. Distinct from `open` (the target
   // state): hidden for the whole collapse and for most of an expand, so
-  // text is never seen truncated/sliding while the width is in between.
+  // text is never seen cut off/sliding while the width is in between.
   const [labels, setLabels] = useState(open)
   const labelsRef = useRef(open)
   const setLabelsNow = (next: boolean) => {
@@ -451,7 +451,7 @@ export function Sidebar({ open, onToggle, onWidthChange, onMemory, memoryCount, 
             </IconSlot>
             {labels && (
               <>
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-chrome-text">
+                <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-xs font-medium text-chrome-text">
                   {profile?.displayName || 'Personal'}
                 </span>
                 <ChevronUpDown className="shrink-0 text-chrome-faint" />

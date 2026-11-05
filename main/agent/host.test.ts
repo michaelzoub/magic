@@ -178,7 +178,7 @@ describe('EmbeddedAgentHost', () => {
         throw new Error('send should not be used when streaming is available')
       },
       sendStream: async (_message, opts) => {
-        opts?.onEvent({ type: 'text-delta', text: 'Opening…' })
+        opts?.onEvent({ type: 'text-delta', text: 'Opening' })
         opts?.onEvent({ type: 'tool-call', id: 'c1', name: 'open_tab' })
         opts?.onEvent({ type: 'tool-result', id: 'c1', name: 'open_tab', outcome: 'completed' })
         return { sessionId: 's1', reply: 'Opened.', status: 'completed' as const }
@@ -187,7 +187,7 @@ describe('EmbeddedAgentHost', () => {
     const result = await host.ask('open youtube', { workspace: null, tabs: [] }, (e) => events.push(e))
     expect(result.reply).toBe('Opened.')
     expect(events).toEqual([
-      { type: 'text-delta', text: 'Opening…' },
+      { type: 'text-delta', text: 'Opening' },
       { type: 'tool-call', id: 'c1', name: 'open_tab' },
       { type: 'tool-result', id: 'c1', name: 'open_tab', outcome: 'completed' }
     ])

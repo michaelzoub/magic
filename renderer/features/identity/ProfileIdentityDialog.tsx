@@ -352,7 +352,7 @@ export function ProfileIdentityDialog({ open, completed, onClose, onImportLogins
                     disabled={saving || !draftName.trim()}
                     onClick={() => void save()}
                   >
-                    {saving ? 'Saving…' : 'Save'}
+                    {saving ? 'Saving' : 'Save'}
                   </Button>
                 </div>
               </>
@@ -361,7 +361,7 @@ export function ProfileIdentityDialog({ open, completed, onClose, onImportLogins
                 {onImportLogins ? (
                   <Button variant="ghost" onClick={onImportLogins}>
                     <Download width={13} height={13} />
-                    Import logins…
+                    Import logins
                   </Button>
                 ) : (
                   <span />

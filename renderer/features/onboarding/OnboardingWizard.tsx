@@ -134,7 +134,7 @@ export function OnboardingWizard({ flow, open, onClose, onComplete, title = 'Wel
           </Button>
         )}
         <Button variant="primary" disabled={saving} onClick={() => void advance()}>
-          {saving ? 'Saving…' : flow.isLast ? 'Save' : 'Continue →'}
+          {saving ? 'Saving' : flow.isLast ? 'Save' : 'Continue →'}
         </Button>
       </footer>
     </Dialog>

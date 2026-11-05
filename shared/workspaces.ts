@@ -26,7 +26,7 @@ export interface WorkspaceRecord {
   name: string
   /** What the user wants to get done in this workspace. */
   goal: string
-  /** Icon key understood by the renderer (`user`, `briefcase`, …). */
+  /** Icon key understood by the renderer (`user`, `briefcase`, `layers`). */
   icon: string
   /** Shown in the sidebar's existing-workspaces section. */
   listed: boolean

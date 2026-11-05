@@ -321,7 +321,7 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
               ) : (
                 <Globe className="h-3.5 w-3.5 shrink-0 text-chrome-faint" />
               )}
-              <span className="truncate">{tab.title}</span>
+              <span className="overflow-hidden whitespace-nowrap text-clip">{tab.title}</span>
             </div>
           )
         }
@@ -386,7 +386,7 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
             ) : (
               <Globe className={`h-3.5 w-3.5 shrink-0 text-chrome-faint ${tab.isLoading ? 'animate-pulse' : ''}`} />
             )}
-            <span className="truncate">{tab.title}</span>
+            <span className="overflow-hidden whitespace-nowrap text-clip">{tab.title}</span>
             <button
               type="button"
               aria-label="Close tab"

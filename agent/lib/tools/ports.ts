@@ -1,5 +1,5 @@
 /**
- * Ports the tool layer depends on. Implementations (Electron, test fakes…)
+ * Ports the tool layer depends on. Implementations (Electron, test fakes)
  * live outside `agent/tools`; nothing here may import Electron or an agent runtime.
  */
 import type { BrowserEngine, TabId } from '@shared/engine'

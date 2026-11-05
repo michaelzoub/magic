@@ -45,7 +45,7 @@ App code talks to the running agent only through `lib/runtime`:
 
 ```ts
 import { createAgentRuntime } from './lib/runtime'
-const runtime = createAgentRuntime() // AGENT_RUNTIME=eve, EVE_AGENT_URL=…
+const runtime = createAgentRuntime() // AGENT_RUNTIME=eve, EVE_AGENT_URL=<url>
 const { reply, sessionId } = await runtime.send('Open example.com and summarize it')
 ```
 

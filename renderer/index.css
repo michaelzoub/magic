@@ -32,6 +32,9 @@
   }
 }
 
+/* No ellipsis anywhere in the UI: overflowed text clips, never shows dots. */
+*, *::before, *::after { text-overflow: clip !important; }
+
 html, body, #root { height: 100%; }
 body {
   @apply bg-chrome-bg/90 font-sans text-sm text-chrome-text antialiased select-none overflow-hidden;

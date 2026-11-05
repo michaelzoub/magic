@@ -113,7 +113,7 @@ export function NewTabPage({ workspaceName, switchStats, recent, onNavigate, onO
                   ) : (
                     <Globe className="h-4 w-4 shrink-0 text-chrome-muted" />
                   )}
-                  <span className="truncate text-sm text-chrome-text">{item.title || hostOf(item.url)}</span>
+                  <span className="overflow-hidden whitespace-nowrap text-clip text-sm text-chrome-text">{item.title || hostOf(item.url)}</span>
                 </button>
               </li>
             ))}

@@ -8,7 +8,7 @@ const completed = (settings: CompletedOnboarding['settings'], goal = ''): Comple
 })
 
 describe('stripComposedSites', () => {
-  it('removes the composed "For <area>, sites include …" suffix', () => {
+  it('removes the composed "For <area>, sites include " suffix', () => {
     expect(stripComposedSites('Ship v2 For Work, sites include gmail.com, notion.so.', 'Work')).toBe('Ship v2')
     expect(stripComposedSites('For Work, sites include gmail.com.', 'Work')).toBe('')
   })

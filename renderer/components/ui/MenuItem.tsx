@@ -25,12 +25,12 @@ export function MenuItem({ icon, label, detail, selected, muted, onSelect }: {
       {icon && <span className={`grid w-3.5 shrink-0 place-items-center text-white/55 ${detail ? 'mt-px' : ''}`}>{icon}</span>}
       {detail ? (
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate leading-4">{label}</span>
-          <span className="line-clamp-2 text-2xs leading-[1.35] text-white/40">{detail}</span>
+          <span className="overflow-hidden whitespace-nowrap text-clip leading-4">{label}</span>
+          <span className="text-2xs leading-[1.35] text-white/40">{detail}</span>
         </span>
       ) : (
         <>
-          <span className="truncate">{label}</span>
+          <span className="overflow-hidden whitespace-nowrap text-clip">{label}</span>
           <span className="flex-1" />
         </>
       )}

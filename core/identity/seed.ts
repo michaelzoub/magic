@@ -26,7 +26,7 @@ export function hashParts(parts: readonly string[]): number {
 
 /**
  * Derive the persisted seed from canonical identity parts (name, areas,
- * sites, …). Empty input is refused so a seed always means something.
+ * sites). Empty input is refused so a seed always means something.
  */
 export function deriveIdentitySeed(parts: readonly string[]): IdentitySeed {
   const clean = parts.map((p) => p.trim()).filter(Boolean)

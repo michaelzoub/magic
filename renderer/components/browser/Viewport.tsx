@@ -24,7 +24,7 @@ export function Viewport({ tab, resume, onResume, workspaceName, switchStats, re
    */
   resume?: Checkpoint | null
   onResume?(): void
-  /** Active workspace name, shown under the new-tab search box ("In …"). */
+  /** Active workspace name, shown under the new-tab search box ("In <workspace>"). */
   workspaceName?: string | null
   /** Workspace switch counts shown as stats on the new-tab page. */
   switchStats?: { today: number; pastWeek: number }

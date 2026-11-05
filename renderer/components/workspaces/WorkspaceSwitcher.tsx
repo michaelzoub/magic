@@ -280,7 +280,7 @@ export function WorkspaceList({ open: expanded, ws, feedback, onSelect }: { open
               ${phase ? `${feedbackBlueBg} text-chrome-text` : ''}`}
           >
             <IconSlot><w.Icon /></IconSlot>
-            {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}
+            {expanded && <span className="flex-1 overflow-hidden whitespace-nowrap text-clip text-left">{w.name}</span>}
             {phase === 'preparing' ? (
               <span aria-hidden="true" className="ml-auto h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-blue-300/30 border-t-blue-300" />
             ) : null}

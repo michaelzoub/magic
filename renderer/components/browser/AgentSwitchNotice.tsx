@@ -126,7 +126,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
               ) : (
                 <span aria-hidden="true" className="ml-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-white/80" />
               )}
-              <span className="min-w-0 flex-1 truncate text-base font-medium leading-tight">Thinking</span>
+              <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-base font-medium leading-tight">Thinking</span>
               <button
                 type="button"
                 aria-label="Dismiss"
@@ -139,12 +139,12 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
             <ul ref={traceListRef} aria-label="Agent status" className="mt-2 flex max-h-[7.5rem] flex-col gap-1 overflow-y-auto pr-1">
               {notice.traces.length > 0 ? (
                 notice.traces.map((trace, i, all) => (
-                  <li key={`${i}-${trace}`} className={`truncate text-xs leading-tight ${i === all.length - 1 ? 'text-white/85' : 'text-white/40'}`}>
+                  <li key={`${i}-${trace}`} className={`overflow-hidden whitespace-nowrap text-clip text-xs leading-tight ${i === all.length - 1 ? 'text-white/85' : 'text-white/40'}`}>
                     {trace}
                   </li>
                 ))
               ) : (
-                <li className="truncate text-xs leading-tight text-white/40">{`Preparing ${notice.toName}`}</li>
+                <li className="overflow-hidden whitespace-nowrap text-clip text-xs leading-tight text-white/40">{`Preparing ${notice.toName}`}</li>
               )}
             </ul>
           </div>
@@ -163,7 +163,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
       >
         <div className="flex shrink-0 items-center gap-2">
           {running && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-white/70" />}
-          <div className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
+          <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-sm font-medium leading-tight">
             {running ? `Preparing layout for ${notice.toName}` : `Proposed layout for ${notice.toName}`}
           </div>
           <button
@@ -181,7 +181,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
         {running && notice.traces.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1">
             {notice.traces.slice(-5).map((trace, i, all) => (
-              <li key={`${i}-${trace}`} className={`truncate text-xs leading-tight ${i === all.length - 1 ? 'text-white/80' : 'text-white/40'}`}>
+              <li key={`${i}-${trace}`} className={`overflow-hidden whitespace-nowrap text-clip text-xs leading-tight ${i === all.length - 1 ? 'text-white/80' : 'text-white/40'}`}>
                 {trace}
               </li>
             ))}
@@ -195,7 +195,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
 
         {notice.phase === 'done' && !hasProposals && (
           <>
-            {notice.reply && <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-snug text-white/60">{notice.reply}</p>}
+            {notice.reply && <p className="mt-2 whitespace-pre-wrap text-xs leading-snug text-white/60">{notice.reply}</p>}
             <p className="mt-2 text-2xs text-white/40">No tab changes proposed — your tabs are unchanged.</p>
           </>
         )}
@@ -228,9 +228,9 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
                           >
                             <Globe className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-white/40' : 'text-white/20'}`} />
                             <span className="min-w-0 flex-1">
-                              <span className={`block truncate text-xs leading-tight ${isSelected ? 'text-white/90' : 'text-white/35 line-through decoration-white/25'}`}>{detail.title}</span>
+                              <span className={`block overflow-hidden whitespace-nowrap text-clip text-xs leading-tight ${isSelected ? 'text-white/90' : 'text-white/35 line-through decoration-white/25'}`}>{detail.title}</span>
                               {detail.detail && detail.detail !== detail.title && (
-                                <span className={`block truncate text-2xs leading-tight ${isSelected ? 'text-white/35' : 'text-white/20'}`}>{detail.detail}</span>
+                                <span className={`block overflow-hidden whitespace-nowrap text-clip text-2xs leading-tight ${isSelected ? 'text-white/35' : 'text-white/20'}`}>{detail.detail}</span>
                               )}
                             </span>
                             <span

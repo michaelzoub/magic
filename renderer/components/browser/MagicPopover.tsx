@@ -30,7 +30,7 @@ const summarizeInput = (input: unknown): string => {
   if (input === undefined) return ''
   try {
     const text = typeof input === 'string' ? input : JSON.stringify(input)
-    return text.length > 90 ? `${text.slice(0, 90)}…` : text
+    return text.length > 90 ? `${text.slice(0, 90)}` : text
   } catch {
     return ''
   }
@@ -90,7 +90,7 @@ function SuggestionRow({ icon, title, subtitle, disabled, onClick }: {
       className="group flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 disabled:opacity-50 [&_svg]:h-3.5 [&_svg]:w-3.5"
     >
       <span className="shrink-0 text-white/35 transition-colors group-hover:text-white/60">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">
+      <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip">
         <span className="text-xs text-white/85">{title}</span>
         <span className="text-2xs text-white/35"> · {subtitle}</span>
       </span>
@@ -440,7 +440,7 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
             </form>
             {assistance.excludedSites.map((site) => (
               <div key={site} className="mt-1 flex items-center justify-between px-0.5 py-0.5">
-                <span className="truncate text-xs text-white/80">{site}</span>
+                <span className="overflow-hidden whitespace-nowrap text-clip text-xs text-white/80">{site}</span>
                 <button
                   type="button"
                   aria-label={`Remove ${site} exclusion`}
@@ -469,7 +469,7 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
                     }
                     className="accent-white"
                   />
-                  <span className="truncate">{w.name}</span>
+                  <span className="overflow-hidden whitespace-nowrap text-clip">{w.name}</span>
                 </label>
               )
             })}
@@ -507,8 +507,8 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
                             {t.status === 'running' ? '◌' : t.status === 'completed' ? '✓' : '✗'}
                           </span>
                           <span className="shrink-0">{t.name.replace(/_/g, ' ')}</span>
-                          {summarizeInput(t.input) && <span className="truncate text-white/25">{summarizeInput(t.input)}</span>}
-                          {t.error && <span className="truncate text-red-300">{t.error}</span>}
+                          {summarizeInput(t.input) && <span className="overflow-hidden whitespace-nowrap text-clip text-white/25">{summarizeInput(t.input)}</span>}
+                          {t.error && <span className="overflow-hidden whitespace-nowrap text-clip text-red-300">{t.error}</span>}
                           <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-white/25" />
                         </li>
                       ))}
@@ -528,7 +528,7 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
                           ))}
                         </span>
                       )}
-                      <span className="thinking-shimmer text-sm">{m.tools?.some((t) => t.status === 'running') ? 'Working…' : 'Thinking…'}</span>
+                      <span className="thinking-shimmer text-sm">{m.tools?.some((t) => t.status === 'running') ? 'Working' : 'Thinking'}</span>
                     </p>
                   )}
                 </div>
@@ -547,10 +547,10 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
                 onClick={() => onOpenTab(t)}
                 className="flex w-full flex-col gap-0.5 rounded-[6px] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
               >
-                <span className="truncate text-xs text-white/90">{t.title || t.url}</span>
+                <span className="overflow-hidden whitespace-nowrap text-clip text-xs text-white/90">{t.title || t.url}</span>
                 <span className="flex min-w-0 items-center gap-2 text-2xs text-white/40">
                   <span className="shrink-0">{t.workspaceName}</span>
-                  <span className="min-w-0 truncate">{t.url}</span>
+                  <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip">{t.url}</span>
                 </span>
               </button>
             </li>
@@ -570,12 +570,12 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
                 onClick={() => onResume(r.workspaceId)}
                 className="flex w-full flex-col gap-0.5 rounded-[6px] bg-white/[0.06] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.09]"
               >
-                <span className="truncate text-xs text-white/90">{r.workspaceName}</span>
+                <span className="overflow-hidden whitespace-nowrap text-clip text-xs text-white/90">{r.workspaceName}</span>
                 <span className="flex min-w-0 items-center gap-2 text-2xs text-white/40">
                   <span className="shrink-0">
                     {r.tabCount} tab{r.tabCount === 1 ? '' : 's'}
                   </span>
-                  {r.activeTabTitle && <span className="min-w-0 truncate">{r.activeTabTitle}</span>}
+                  {r.activeTabTitle && <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip">{r.activeTabTitle}</span>}
                 </span>
               </button>
             ))
@@ -595,11 +595,11 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
             disabled={pending}
             value={query}
             onChange={(e) => (setQuery(e.currentTarget.value), setNotice(null))}
-            placeholder="Ask a question or give a task…"
+            placeholder="Ask a question or give a task"
             className="min-w-0 flex-1 bg-transparent px-2.5 py-1 text-sm text-white placeholder:text-white/35 outline-none disabled:opacity-50"
           />
           <Button type="submit" variant="secondary" disabled={pending || !query.trim()}>
-            {pending ? 'Working…' : 'Ask'}
+            {pending ? 'Working' : 'Ask'}
           </Button>
         </div>
       </form>

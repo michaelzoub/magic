@@ -68,7 +68,7 @@ function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavi
         <BeforeIcon width={18} height={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-white" title={checkpoint.before.title}>
+        <div className="overflow-hidden whitespace-nowrap text-clip text-sm font-semibold text-white" title={checkpoint.before.title}>
           {checkpoint.before.title}
         </div>
         {/* Switch pill directly under the headline: where this moment came
@@ -77,9 +77,9 @@ function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavi
           <span className="inline-flex max-w-full items-center gap-1 rounded-[6px] bg-emerald-400/15 px-2 py-1 text-xs text-emerald-100/80">
             <AfterIcon aria-hidden="true" width={12} height={12} className="shrink-0 text-emerald-200/70" />
             <span className="shrink-0">Switched from</span>
-            <span className="truncate text-white/45" title={checkpoint.before.title}>{checkpoint.before.title}</span>
+            <span className="overflow-hidden whitespace-nowrap text-clip text-white/45" title={checkpoint.before.title}>{checkpoint.before.title}</span>
             <span className="shrink-0">to</span>
-            <span className="truncate font-semibold text-white" title={checkpoint.after.title}>{checkpoint.after.title}</span>
+            <span className="overflow-hidden whitespace-nowrap text-clip font-semibold text-white" title={checkpoint.after.title}>{checkpoint.after.title}</span>
           </span>
         </div>
         {/* Saved tabs as browser-tab chips, matching the active tab in the
@@ -98,7 +98,7 @@ function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavi
                 ) : (
                   <Globe aria-hidden="true" width={14} height={14} className="shrink-0 text-white/60" />
                 )}
-                <span className="truncate">{t.title || hostOf(t.url)}</span>
+                <span className="overflow-hidden whitespace-nowrap text-clip">{t.title || hostOf(t.url)}</span>
               </span>
             ))}
             {extraTabs > 0 && (
@@ -115,7 +115,7 @@ function CheckpointRow({ checkpoint, workspaces, now, kept, onToggleKept, onNavi
               {ago.label}
             </time>
           </Chip>
-          <span className="truncate">{kept ? 'Kept by you' : 'Automatic'}</span>
+          <span className="overflow-hidden whitespace-nowrap text-clip">{kept ? 'Kept by you' : 'Automatic'}</span>
         </div>
       </div>
 

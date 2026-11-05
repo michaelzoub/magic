@@ -25,7 +25,7 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * Undo `composeGoalWithSites` (core/onboarding/profile.ts) for display: the
- * stored goal text has its example sites concatenated in ("… For Work, sites
+ * stored goal text has its example sites concatenated in ("For Work, sites
  * include gmail.com."), but the dialog lists sites separately, so the suffix
  * would only duplicate them. User-edited goal texts don't match the exact
  * composed suffix and are left untouched.

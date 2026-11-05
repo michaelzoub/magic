@@ -6,8 +6,8 @@ import type { OnboardingData, OnboardingStepDefinition, OnboardingValidator } fr
  * current one, and saves each step's answer under its `id`.
  *
  * Subclass it or instantiate it directly; both work:
- *   class NameStep extends OnboardingStep<string> { ... }
- *   new OnboardingStep({ id: 'name', ui: NameStepUI, validate: ... })
+ *   class NameStep extends OnboardingStep<string>
+ *   new OnboardingStep({ id: 'name', ui: NameStepUI, validate: fn })
  */
 export class OnboardingStep<TValue = unknown, TUi = unknown> {
   readonly id: string

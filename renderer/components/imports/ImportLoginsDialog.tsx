@@ -52,7 +52,7 @@ export function ImportLoginsDialog({ open, onClose, onImported }: {
           of cookies; those will still ask you to log in.
         </p>
 
-        {state.kind === 'loading' && <p className="mt-4 text-xs text-white/40">Looking for browsers…</p>}
+        {state.kind === 'loading' && <p className="mt-4 text-xs text-white/40">Looking for browsers</p>}
 
         {state.kind === 'ready' && (state.sources.length === 0 ? (
           <p className="mt-4 text-xs text-white/40">No Chrome, Chromium, Brave, Edge, or Arc profile found on this Mac.</p>
@@ -75,7 +75,7 @@ export function ImportLoginsDialog({ open, onClose, onImported }: {
         ))}
 
         {state.kind === 'importing' && (
-          <p className="mt-4 text-xs text-white/40">Importing from {state.label} — allow the Keychain prompt if it appears…</p>
+          <p className="mt-4 text-xs text-white/40">Importing from {state.label} — allow the Keychain prompt if it appears</p>
         )}
 
         {state.kind === 'done' && (

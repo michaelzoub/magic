@@ -30,7 +30,7 @@ export function WorkspaceDriftNotice({ workspaceName, onDismiss, onQuit }: {
       >
       <WarningTriangle className="h-6 w-6 shrink-0 text-amber-400 drop-shadow-[0_2px_6px_rgb(245_158_11/0.45)]" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold leading-tight text-white">
+        <span className="block overflow-hidden whitespace-nowrap text-clip text-sm font-semibold leading-tight text-white">
           Off track from “{workspaceName}”?
         </span>
         <span className="mt-0.5 block text-xs leading-snug text-white/55">

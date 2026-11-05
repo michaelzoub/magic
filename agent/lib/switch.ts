@@ -15,7 +15,7 @@ function workspaceBlock(label: string, w: WorkspaceSwitchNotice['to']): string {
 function tabList(label: string, tabs: AgentTabInfo[]): string {
   if (tabs.length === 0) return `${label}: (none)`
   const lines = tabs.slice(0, MAX_TABS_LISTED).map((t) => `- ${t.title.trim() || '(untitled)'} — ${t.url}`)
-  if (tabs.length > MAX_TABS_LISTED) lines.push(`- …and ${tabs.length - MAX_TABS_LISTED} more`)
+  if (tabs.length > MAX_TABS_LISTED) lines.push(`- and ${tabs.length - MAX_TABS_LISTED} more`)
   return `${label}:\n${lines.join('\n')}`
 }
 
