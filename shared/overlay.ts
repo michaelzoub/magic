@@ -155,6 +155,8 @@ export interface OverlayHost {
   onAgentNotice(handler: (notice: AgentSwitchNoticeState | null) => void): () => void
   /** Receive workspace drift notice updates pushed by the shell (null = hidden). Returns an unsubscribe. */
   onDriftNotice(handler: (notice: WorkspaceDriftNoticeState | null) => void): () => void
+  /** Report the agent notice panel's rendered height so the native layer can hug it. */
+  reportNoticeHeight(px: number): void
   /** Hide this overlay immediately (the shell is also told via surface:close). */
   dismiss(kind: SurfaceKind): void
 }
@@ -178,7 +180,9 @@ export const OVERLAY_IPC = {
   /** shell -> main -> overlay renderer: current agent switch notice (null = none). */
   agentNotice: 'overlay:agent-notice',
   /** shell -> main -> overlay renderer: current workspace drift notice (null = none). */
-  driftNotice: 'overlay:drift-notice'
+  driftNotice: 'overlay:drift-notice',
+  /** overlay renderer -> main: rendered height (px) of the agent notice panel, so the native layer hugs it. */
+  noticeHeight: 'overlay:notice-height'
 } as const
 
 /**
@@ -213,7 +217,7 @@ export const MAGIC_POPOVER_WIDTH = 440
 export const MAGIC_POPOVER_HEIGHT = 520
 
 /**
- * Top-left of the compact magic popover for `anchor`: beside the icon,
+ * Top-left of the compact magic popover for `anchor`: directly above the button,
  * bottom-aligned with it (the icon sits near the window's bottom edge),
  * clamped into the window.
  */
@@ -222,7 +226,8 @@ export function magicPopoverPosition(
   size: { height: number },
   window: { width: number; height: number }
 ): { x: number; y: number; width: number } {
-  const raw = { x: anchor.x + anchor.width + 8, y: anchor.y + anchor.height - size.height }
+  // Directly above the button, left edges aligned.
+  const raw = { x: anchor.x, y: anchor.y - size.height - 8 }
   return {
     x: Math.max(4, Math.min(Math.round(raw.x), Math.max(4, window.width - MAGIC_POPOVER_WIDTH - 4))),
     y: Math.max(4, Math.min(Math.round(raw.y), Math.max(4, window.height - size.height - 4))),

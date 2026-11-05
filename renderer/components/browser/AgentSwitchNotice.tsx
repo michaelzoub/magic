@@ -27,8 +27,15 @@ const groupIcon = (kind: AgentTabProposal['kind']) => {
  * styling matches Magic's other popups; entrance/exit is a short upward
  * slide + fade via `motion.dockIn`/`dockOut`.
  */
-export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
+export function AgentSwitchNotice({ notice, onApply, onDismiss, onHeight }: {
   notice: AgentSwitchNoticeState
+  /**
+   * Native overlay host: called with the panel's rendered height so the
+   * layer can shrink to it. When set, the panel's max height is fixed
+   * rather than viewport-relative (the viewport *is* the layer, so a
+   * vh cap would never let the panel grow).
+   */
+  onHeight?(px: number): void
   /** Apply only the proposals the user left selected. */
   onApply(proposals: AgentTabProposal[]): void
   onDismiss(): void
@@ -65,6 +72,18 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
     leaving.current = true
     motion.dockOut(panelRef.current, action)
   }
+
+  // Report the panel's height (including its 12px bottom inset) as it
+  // changes; the element swaps between the running and concluded layouts.
+  useEffect(() => {
+    const el = panelRef.current
+    if (!onHeight || !el) return
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight))
+    ro.observe(el)
+    onHeight(el.offsetHeight)
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, !!onHeight])
 
   const groups = groupProposals(notice.proposals)
   const identity = useMemo(() => {
@@ -140,9 +159,9 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
         ref={panelRef}
         role="status"
         aria-live="polite"
-        className={`no-drag pointer-events-auto max-h-[calc(100vh-24px)] w-[448px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-lg p-3 ring-1 ring-white/10 ${surface}`}
+        className={`no-drag pointer-events-auto flex ${onHeight ? 'max-h-[736px]' : 'max-h-[calc(100vh-24px)]'} w-[448px] max-w-[calc(100vw-24px)] flex-col rounded-lg p-3 ring-1 ring-white/10 ${surface}`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {running && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-white/70" />}
           <div className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
             {running ? `Preparing layout for ${notice.toName}` : `Proposed layout for ${notice.toName}`}
@@ -183,7 +202,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
 
         {hasProposals && (
           <>
-            <div className="mt-2.5 flex flex-col gap-2.5">
+            <div className="mt-2.5 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5">
               {groups.map((group) => (
                 <div key={group.kind}>
                   <div className="flex items-center gap-1.5 px-0.5 text-2xs font-medium uppercase tracking-[0.06em] text-white/40">
@@ -231,7 +250,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
               ))}
             </div>
 
-            <div className="mt-2.5">
+            <div className="mt-2.5 shrink-0">
               <button
                 type="button"
                 aria-expanded={whyOpen}
@@ -248,7 +267,7 @@ export function AgentSwitchNotice({ notice, onApply, onDismiss }: {
               )}
             </div>
 
-            <div className="mt-3 flex gap-1.5 border-t border-white/[0.07] pt-2.5">
+            <div className="mt-3 flex shrink-0 gap-1.5 border-t border-white/[0.07] pt-2.5">
               <Button
                 variant="primary"
                 className="flex-1"

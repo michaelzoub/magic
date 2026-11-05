@@ -22,6 +22,8 @@ export class FloatingOverlay {
   private notice: AgentSwitchNoticeState | null = null
   private drift: WorkspaceDriftNoticeState | null = null
   private ready = false
+  /** Rendered height of the agent notice panel, reported by the overlay renderer (0 = not yet measured). */
+  private noticeHeight = 0
 
   constructor(private window: BrowserWindow) {
     this.view.setBackgroundColor('#00000000')
@@ -34,6 +36,12 @@ export class FloatingOverlay {
     })
     if (process.env.ELECTRON_RENDERER_URL) void wc.loadURL(`${process.env.ELECTRON_RENDERER_URL}/overlay.html`)
     else void wc.loadFile(join(__dirname, '../renderer/overlay.html'))
+    wc.ipc.on(OVERLAY_IPC.noticeHeight, (_e, px: unknown) => {
+      const h = typeof px === 'number' && Number.isFinite(px) ? Math.max(0, Math.ceil(px)) : 0
+      if (h === this.noticeHeight) return
+      this.noticeHeight = h
+      if (this.notice && !this.current) this.layout()
+    })
     window.on('resize', () => this.layout())
   }
 
@@ -47,6 +55,7 @@ export class FloatingOverlay {
 
   /** Show/update the agent switch notice; independent of any open surface. */
   showAgentNotice(notice: AgentSwitchNoticeState | null): void {
+    if (!notice || notice.id !== this.notice?.id) this.noticeHeight = 0
     this.notice = notice
     // Re-layout on clear too: a queued drift notice (see notification
     // ordering in the overlay renderer) becomes visible next and needs
@@ -121,7 +130,11 @@ export class FloatingOverlay {
   /** Keep the overlay above page views that were (re)attached after it. */
   raise(): void {
     if ((!this.current && !this.notice && !this.drift) || this.window.isDestroyed()) return
-    if (this.window.contentView.children.includes(this.view)) {
+    const children = this.window.contentView.children
+    // Already on top: skip the detach/re-attach (it runs on every engine
+    // snapshot and would otherwise churn the view and drop its focus).
+    if (children[children.length - 1] === this.view) return
+    if (children.includes(this.view)) {
       this.window.contentView.removeChildView(this.view)
       this.window.contentView.addChildView(this.view)
     }
@@ -133,10 +146,13 @@ export class FloatingOverlay {
     if (this.current) {
       this.view.setBounds({ x: 0, y: 0, width, height })
     } else if (this.notice) {
-      // Notice-only: keep the layer confined to the bottom-center dock
-      // sheet area so the rest of the window stays clickable through it.
+      // Notice-only: hug the rendered panel (+ its 12px bottom inset and
+      // a little room for the glow) — this native layer swallows every
+      // click inside its bounds, so any slack above the panel is a dead
+      // zone over the page. Until the first measurement lands, assume a
+      // compact running dock.
       const w = Math.min(496, width)
-      const h = Math.min(520, height)
+      const h = Math.min(this.noticeHeight > 0 ? this.noticeHeight + 24 : 140, 760, height)
       this.view.setBounds({ x: Math.max(0, Math.round((width - w) / 2)), y: Math.max(0, height - h), width: w, height: h })
     } else if (this.drift) {
       // Drift-only: same bottom-center dock as the agent notice, sized

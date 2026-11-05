@@ -102,9 +102,6 @@ function createWindow(): void {
     // buttons centred in the renderer's reserved 44px drag strip.
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 16 },
-    // Open fullscreen; the native buttons/menu reveal on hover at the
-    // top edge, same as Chrome in fullscreen.
-    fullscreen: true,
     vibrancy: 'sidebar',
     visualEffectState: 'followWindow',
     backgroundColor: '#00000000',
@@ -147,7 +144,28 @@ function createWindow(): void {
   })
   void engine.createTab()
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    win.show()
+    // Open fullscreen; the native buttons/menu reveal on hover at the
+    // top edge, same as Chrome in fullscreen.
+    win.setFullScreen(true)
+  })
+  // macOS: child WebContentsViews (pages, overlay) keep hit-testing in
+  // the frame they had before the fullscreen transition, so everything
+  // below the old window height paints but its clicks fall through to the
+  // shell. Electron skips setBounds when the rect is unchanged, so nudge
+  // each child's bounds and restore them to force a real native re-frame.
+  const refreshChildViews = () => {
+    if (win.isDestroyed()) return
+    for (const child of win.contentView.children) {
+      const b = child.getBounds()
+      child.setBounds({ ...b, height: b.height + 1 })
+      child.setBounds(b)
+    }
+  }
+  win.on('enter-full-screen', () => setTimeout(refreshChildViews, 50))
+  win.on('leave-full-screen', () => setTimeout(refreshChildViews, 50))
+  win.on('resize', refreshChildViews)
   if (process.env.MAGIC_SHOT) {
     setInterval(() => {
       if (win.isDestroyed()) return

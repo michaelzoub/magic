@@ -3,7 +3,7 @@ import type { TabState } from '@shared/engine'
 import { motion } from '@/motion'
 import { dragTarget } from './tabDrag'
 import { diffTabs } from './tabFeedback'
-import { blueprintGridRed, feedbackBlueBg, feedbackRed } from './feedbackStyle'
+import { feedbackBlueBg, feedbackRedBg } from './feedbackStyle'
 import { Close, Globe, Plus } from '../ui/icons'
 import { IconButton } from '../ui/IconButton'
 
@@ -44,10 +44,8 @@ interface DragSession {
 }
 
 const DRAG_THRESHOLD = 5
-/** Red frame shown on a tab before its close is enacted (~180ms). */
-const CLOSE_FRAME_MS = 180
-/** How long a removed tab's red ghost slot lingers before collapsing away. */
-const EXIT_MS = 1600
+/** How long a removed tab's ghost slot takes to collapse away (no linger: closes must feel instant). */
+const EXIT_MS = 220
 /**
  * How long an added/reused/removed highlight stays painted. The operation
  * animation itself is ~200ms; the frame is then held so the user can
@@ -69,8 +67,6 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
   /** Only used to toggle dragged-tab styling; never per pointermove. */
   const [dragId, setDragId] = useState<string | null>(null)
   // --- Operation feedback (driven by real engine snapshots, see tabFeedback) ---
-  /** Tab awaiting its close: painted with a red frame before the close is enacted. */
-  const [closingId, setClosingId] = useState<string | null>(null)
   /** Removed tabs kept as collapsing ghost slots until their exit finishes. */
   const [exiting, setExiting] = useState<{ tab: TabState; index: number }[]>([])
   /** Blue placeholder slot shown where a tab being created will appear. */
@@ -230,11 +226,10 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
     }
     for (const op of operations) {
       if (op.kind === 'removed') {
-        // A user-initiated close already showed this tab's red frame while
-        // it was live; the ghost slot now animates its disappearance.
+        // The ghost slot animates the disappearance after the fact;
+        // manual closes are never delayed for the sake of this feedback.
         setExiting((list) => (list.some((e) => e.tab.id === op.tab.id) ? list : [...list, { tab: op.tab, index: op.index }]))
         later(() => setExiting((list) => list.filter((e) => e.tab.id !== op.tab.id)), EXIT_MS)
-        if (closingId === op.tab.id) setClosingId(null)
       } else {
         if (op.kind === 'added') setPendingAdd(false)
         flashTab(op.tab.id, op.kind)
@@ -252,16 +247,13 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
   }, [attention?.seq])
 
   /**
-   * Close with feedback: red frame first (~180ms, browser stays fully
-   * interactive), then the real close. A failed close simply clears the
-   * frame and leaves the tab untouched.
+   * Manual close is automatic: close immediately, no pre-close delay.
+   * The red highlight-then-disappear sequence is reserved for agent
+   * closes, which are paused upstream (tool bridge / proposal apply) so
+   * the user can see what the agent is about to remove.
    */
   const handleClose = (id: string) => {
-    if (closingId) return
-    setClosingId(id)
-    later(() => {
-      void Promise.resolve(onClose(id)).catch(() => setClosingId((cur) => (cur === id ? null : cur)))
-    }, CLOSE_FRAME_MS)
+    void Promise.resolve(onClose(id)).catch(() => {})
   }
 
   /** New tab with feedback: a blue frame marks the slot until the tab lands. */
@@ -322,8 +314,7 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
               data-exiting="true"
               aria-hidden="true"
               ref={(el) => { if (el && !el.dataset.out) { el.dataset.out = '1'; motion.tabExit(el) } }}
-              style={blueprintGridRed}
-              className={`pointer-events-none flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 items-center gap-1.5 overflow-hidden rounded-[6px] pl-2.5 pr-1 text-sm text-chrome-muted ${feedbackRed}`}
+              className={`pointer-events-none flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 items-center gap-1.5 overflow-hidden rounded-[6px] pl-2.5 pr-1 text-sm text-chrome-muted ${feedbackRedBg}`}
             >
               {tab.favicon ? (
                 <img src={tab.favicon} alt="" draggable={false} className="h-3.5 w-3.5 shrink-0 rounded-sm" />
@@ -336,7 +327,6 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
         }
         const active = tab.id === activeTabId
         const isDragged = dragId === tab.id
-        const isClosing = closingId === tab.id
         const tabIndex = tabs.findIndex((t) => t.id === tab.id)
         const marked = markedForRemoval?.includes(tab.id) ?? false
         const feedback = marked ? 'removed' : highlighted.get(tab.id)
@@ -380,15 +370,15 @@ export function TabStrip({ tabs, activeTabId, attention, markedForRemoval, onSel
             }}
             style={{
               ...(isDragged ? { transform: `translateX(${sessionRef.current?.dx ?? 0}px)`, zIndex: 10 } : {}),
-              ...(feedback === 'added' || feedback === 'reused' ? { backgroundColor: 'rgb(147 197 253 / 0.30)' } : {}),
-              ...(feedback === 'removed' ? blueprintGridRed : {})
+              ...(feedback === 'added' || feedback === 'reused' ? { backgroundColor: 'rgb(147 197 253 / 0.16)' } : {}),
+              ...(feedback === 'removed' ? { backgroundColor: 'rgb(252 165 165 / 0.16)' } : {})
             }}
             className={`no-drag group relative flex h-8 min-w-0 max-w-[220px] flex-1 basis-0 touch-none items-center gap-1.5 rounded-[6px] pl-2.5 pr-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-chrome-faint [&_svg]:size-3.5
               ${isDragged ? 'cursor-grabbing shadow-[0_4px_16px_rgb(0_0_0/0.18)]' : 'cursor-grab'}
               ${active
                 ? 'bg-chrome-active text-chrome-text'
                 : 'text-chrome-muted hover:bg-chrome-hover/[0.05] hover:text-chrome-text'} ${tab.isDiscarded ? 'opacity-60' : ''}
-              ${isClosing || feedback === 'removed' ? feedbackRed : ''}
+              ${feedback === 'removed' ? feedbackRedBg : ''}
               ${feedback === 'added' || feedback === 'reused' ? feedbackBlueBg : ''}`}
           >
             {tab.favicon ? (
