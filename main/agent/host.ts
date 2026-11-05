@@ -569,6 +569,11 @@ export class EmbeddedAgentHost {
     throw new Error(`Eve server did not become healthy within ${timeoutMs}ms`)
   }
 
+  /** Start the bridge + Eve server now; resolves to an error result on failure, null when ready. */
+  warmUp(): Promise<AgentRunResult | null> {
+    return this.ensureReady()
+  }
+
   /**
    * Drop the running Eve server and cached model clients so the next run
    * starts fresh — called after the model API key changes, since both

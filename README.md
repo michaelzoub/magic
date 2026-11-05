@@ -30,11 +30,12 @@ Grab the latest build for your platform from [Releases](https://github.com/micha
 | macOS (Apple silicon) | `Magic-x.y.z-mac-arm64.dmg` |
 | macOS (Intel) | `Magic-x.y.z-mac-x64.dmg` |
 | Windows | `Magic-x.y.z-win-x64.exe` |
-| Linux | `Magic-x.y.z-linux-x86_64.AppImage` or `.deb` |
 
 On first launch, open **Settings** (your avatar at the bottom of the sidebar) and paste a Meta Model API key from [dev.meta.ai](https://dev.meta.ai). The key is encrypted with your system keychain and stays on your device. Browsing and workspaces work without a key; the agent turns on once one is set.
 
-> **macOS:** builds are not yet notarized, so macOS may say Magic "is damaged" or "can't be opened". Right-click the app and choose **Open**, or run `xattr -cr /Applications/Magic.app` once.
+> **macOS:** builds aren't notarized yet, so the first launch is blocked with "Apple could not verify Magic is free of malware". Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. Or, after dragging Magic to Applications, run `xattr -cr /Applications/Magic.app` once.
+>
+> **Windows:** the installer isn't code-signed yet, so SmartScreen may show "Windows protected your PC". Click **More info → Run anyway**.
 
 ## Run from source
 
@@ -68,6 +69,6 @@ Bump `version` in `package.json`, then push a tag:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` builds macOS, Windows and Linux installers and attaches them to a draft release. Review the draft, then publish it. In the packaged app, the agent runs as a prebuilt Eve server (`npm run build:agent`) shipped in the app's resources, and its state lives in the user's app-data folder.
+`.github/workflows/release.yml` builds the macOS and Windows installers, checks that each packaged app starts, and attaches them to a draft release. Review the draft, then publish it. In the packaged app, the agent runs as a prebuilt Eve server (`npm run build:agent`) shipped in the app's resources, and its state lives in the user's app-data folder.
 
-To sign and notarize the macOS build, add the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` repository secrets (this needs an Apple Developer account) and set `notarize: true` in `electron-builder.yml`.
+To sign and notarize the macOS build (removes the first-launch warning), add the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` repository secrets (this needs an Apple Developer account), then in `electron-builder.yml` remove `identity: "-"` and set `hardenedRuntime` and `notarize` to `true`.

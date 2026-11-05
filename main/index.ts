@@ -171,7 +171,8 @@ function createWindow(): void {
     win.show()
     // Open fullscreen; the native buttons/menu reveal on hover at the
     // top edge, same as Chrome in fullscreen.
-    win.setFullScreen(true)
+    // (Skipped in the release smoke test: quitting mid-transition stalls.)
+    if (!process.env.MAGIC_SMOKE_TEST) win.setFullScreen(true)
   })
   // macOS: child WebContentsViews (pages, overlay) keep hit-testing in
   // the frame they had before the fullscreen transition, so everything
@@ -366,8 +367,36 @@ app.whenReady().then(() => {
   // safeStorage (used to decrypt the saved key) needs the app to be ready.
   modelKey.load()
   createWindow()
+  if (process.env.MAGIC_SMOKE_TEST) void runSmokeTest()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })
+
+/**
+ * Release CI check (MAGIC_SMOKE_TEST=1, with any MODEL_API_KEY): the
+ * packaged app must load its UI and start its bundled agent server. Exits
+ * 0 on success, 1 on failure or after two minutes.
+ */
+async function runSmokeTest(): Promise<void> {
+  // Kill the agent server (dispose kills the child synchronously), then
+  // exit hard: a graceful quit can stall on the fullscreen transition and
+  // on the tool bridge draining keep-alive connections.
+  const finish = (code: number) => {
+    for (const host of agentHosts.values()) void host.dispose()
+    process.exit(code)
+  }
+  const fail = (why: string) => (console.error(`[smoke] FAIL: ${why}`), finish(1))
+  const timer = setTimeout(() => fail('timed out'), 120_000)
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return fail('no window')
+  if (win.webContents.isLoading()) await new Promise<void>((r) => win.webContents.once('did-finish-load', () => r()))
+  const host = agentHosts.get(win.webContents.id)
+  if (!host) return fail('no agent host')
+  const error = await host.warmUp()
+  clearTimeout(timer)
+  if (error) return fail(`agent did not start: ${error.reason}`)
+  console.log('[smoke] OK: UI loaded and agent server is healthy')
+  finish(0)
+}
 
 app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit())
 app.on('will-quit', () => workspaceDb?.close())

@@ -1,5 +1,5 @@
 # Packaging for direct downloads (GitHub Releases). Build locally with
-# `npm run dist`; CI builds every platform on a `v*` tag
+# `npm run dist`; CI builds macOS and Windows on a `v*` tag
 # (.github/workflows/release.yml).
 appId: com.michaelzoub.magic
 productName: Magic
@@ -31,10 +31,13 @@ mac:
   target:
     - target: dmg
       arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
-  # Unsigned unless CSC_LINK / APPLE_* secrets are configured (see README).
-  hardenedRuntime: true
+  # Ad-hoc signature ("-"): free, and required — Apple silicon reports an
+  # app with a broken signature as "damaged". Users still confirm the first
+  # launch (Privacy & Security → Open Anyway) until the app is signed with
+  # a Developer ID and notarized: replace "-" with that identity, set
+  # hardenedRuntime and notarize to true (see README → Releasing).
+  identity: "-"
+  hardenedRuntime: false
   notarize: false
 
 dmg:
@@ -48,18 +51,3 @@ win:
 nsis:
   oneClick: true
   perMachine: false
-
-linux:
-  category: Network
-  target:
-    - target: AppImage
-      arch: [x64]
-    - target: deb
-      arch: [x64]
-  maintainer: Magic contributors
-
-publish:
-  provider: github
-  owner: michaelzoub
-  repo: magic
-  releaseType: draft
