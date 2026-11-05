@@ -1,8 +1,9 @@
+import { fileURLToPath } from 'node:url'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const here = new URL('.', import.meta.url).pathname
+const here = fileURLToPath(new URL('.', import.meta.url))
 const config = readFileSync(join(here, '../tailwind.config.js'), 'utf8')
 
 const tsxFiles = (dir: string): string[] =>
