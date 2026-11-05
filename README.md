@@ -2,6 +2,8 @@
 
 A lightweight, intent-driven browser that adapts to what you're working on.
 
+![Magic browser — workspaces in the sidebar and a "pick up where you left off" prompt restoring the tabs from a previous workspace](docs/images/browser.png)
+
 An AI agent understands your browsing context, automatically organizes your tabs, and keeps a recoverable workspace for each activity. Switching between studying, coding, and research becomes as seamless as switching between apps — without ever losing your place.
 
 ## The idea
@@ -9,6 +11,8 @@ An AI agent understands your browsing context, automatically organizes your tabs
 Most browsers organize tabs. Magic organizes *activities*.
 
 Each workspace has a name and a goal — "Study for finals," "Ship the launch," "Plan the trip" — and remembers exactly which tabs belong to it. Open a workspace and its tabs come back, just as you left them. Wander into something else, and Magic notices, tidies up, and keeps a checkpoint so you can return to any earlier moment from Memory.
+
+![Magic chat — ask Magic to organize your tabs, resume your work, or help find a tab](docs/images/magic-chat.png)
 
 ## Design & engineering decisions
 
