@@ -159,6 +159,20 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
   }, [showSettings])
   const assistance = context.assistance
 
+  // Backstop for hosts whose context refreshes live (shell fallback): if
+  // the active workspace changed under an open conversation — the agent
+  // navigated — close the chat so the dock switch notice owns the screen.
+  // (The native overlay gets a static context, so it relies on the
+  // stream-event close in sendMessage instead.)
+  const workspaceIdRef = useRef(context.workspace?.id ?? null)
+  useEffect(() => {
+    const id = context.workspace?.id ?? null
+    if (workspaceIdRef.current === id) return
+    workspaceIdRef.current = id
+    if (messages.length > 0) onClose?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.workspace?.id])
+
   // Keep the newest chat message in view inside the scrolling middle
   // section (the input below it is pinned and never scrolls away).
   useEffect(() => {
@@ -202,9 +216,14 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
   }, [query, cooldownQuery, context.tabs])
   const matchesRef = useRef<HTMLUListElement>(null)
   // GSAP entrance each time a fresh set of matches lands after a pause.
+  // Keyed on the match ids, not the array: hosts rebuild context objects
+  // on unrelated re-renders, and re-firing the tween on every render made
+  // rows flicker and burned CPU while typing.
+  const matchesKey = matches.map((t) => `${t.workspaceId ?? ''}:${t.id}`).join('|')
   useEffect(() => {
-    if (matches.length > 0 && matchesRef.current) motion.listIn(matchesRef.current)
-  }, [matches])
+    if (matchesKey && matchesRef.current) motion.listIn(matchesRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchesKey])
 
   /**
    * Send one user message and stream the agent reply into the bubble after
@@ -218,8 +237,27 @@ export function MagicPopoverContent({ context, onOpenTab, onResume, onAsk, onSet
     // events fold into it in place until the final result replaces its text.
     const agentIndex = messages.length + 1
     let streamed = ''
+    // Tool-call ids for workspace switches in this turn (tool-result events
+    // don't always repeat the tool name, so match by id as well).
+    const switchCallIds = new Set<string>()
+    let closedForSwitch = false
     const onEvent = (event: AgentStreamEvent) => {
       if (event.type === 'text-delta') streamed += event.text
+      if (event.type === 'tool-call' && event.name === 'switch_workspace') switchCallIds.add(event.id)
+      // The turn just navigated to another workspace: close the chat right
+      // away (hosts' onClose updates their open state — Sidebar's
+      // `magicOpen` / the native overlay surface) so the bottom-dock
+      // switch notice and its recommendations own the screen. The ask
+      // itself keeps running in the shell; only the popover goes away.
+      if (
+        !closedForSwitch &&
+        event.type === 'tool-result' &&
+        event.outcome === 'completed' &&
+        (event.name === 'switch_workspace' || switchCallIds.has(event.id))
+      ) {
+        closedForSwitch = true
+        onClose?.()
+      }
       setMessages((m) => m.map((msg, i) => (i === agentIndex ? applyStreamEvent(msg, event) : msg)))
     }
     setMessages((m) => [...m, { role: 'user', text }, { role: 'agent', text: '', tools: [], streaming: true }])

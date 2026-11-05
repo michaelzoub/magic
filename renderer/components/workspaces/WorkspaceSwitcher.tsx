@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Plus, Trash } from '../ui/icons'
 import { Button, MenuDivider, MenuItem, MenuLabel, Popover, Tooltip } from '../ui'
 import { motion } from '@/motion'
-import { blueprintGrid, feedbackBlue } from '../browser/feedbackStyle'
+import { feedbackBlueBg } from '../browser/feedbackStyle'
 import { workspaceIcon, type UseWorkspaces } from '@/hooks/useWorkspaces'
 import type { OverlayWorkspace } from '@shared/overlay'
 
@@ -276,17 +276,16 @@ export function WorkspaceList({ open: expanded, ws, feedback, onSelect }: { open
             data-workspace-id={w.id}
             data-workspace-feedback={phase ?? undefined}
             onClick={(e) => (motion.press(e.currentTarget), onSelect(w.id))}
-            style={phase ? blueprintGrid : undefined}
             className={`${row} relative cursor-pointer ${active ? 'bg-chrome-hover/[0.10] font-medium text-chrome-text' : 'text-chrome-muted'}
-              ${phase ? `${feedbackBlue} text-chrome-text` : ''}`}
+              ${phase ? `${feedbackBlueBg} text-chrome-text` : ''}`}
           >
             <IconSlot><w.Icon /></IconSlot>
             {expanded && <span className="flex-1 truncate text-left">{w.name}</span>}
             {phase === 'preparing' ? (
               <span aria-hidden="true" className="ml-auto h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-blue-300/30 border-t-blue-300" />
-            ) : (
-              expanded && <CountBadge count={w.tabs?.length ?? 0} />
-            )}
+            ) : null}
+            {/* Tab count hidden until the per-workspace tab invariant is implemented.
+            {expanded && <CountBadge count={w.tabs?.length ?? 0} />} */}
           </button>
         )
         if (!expanded) {

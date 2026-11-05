@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
 /**
@@ -232,9 +233,14 @@ const headingClass = (level: number) =>
       ? 'mb-1.5 mt-2 text-base font-semibold text-white first:mt-0'
       : 'mb-1 mt-2 text-sm font-semibold text-white first:mt-0'
 
-/** Render agent reply text as formatted, readable chat content. */
-export function MarkdownText({ text, className = '' }: { text: string; className?: string }) {
-  const blocks = parseMarkdown(text)
+/**
+ * Render agent reply text as formatted, readable chat content.
+ * Memoized: the chat re-renders on every input keystroke, and re-parsing
+ * every reply (regex-heavy) per keystroke made typing visibly laggy as
+ * the transcript grew. Props are plain strings, so memo skips cleanly.
+ */
+export const MarkdownText = memo(function MarkdownText({ text, className = '' }: { text: string; className?: string }) {
+  const blocks = useMemo(() => parseMarkdown(text), [text])
   return (
     <div className={`min-w-0 text-base leading-relaxed text-white/85 [overflow-wrap:anywhere] ${className}`}>
       {blocks.map((b, idx) => {
@@ -309,4 +315,4 @@ export function MarkdownText({ text, className = '' }: { text: string; className
       })}
     </div>
   )
-}
+})

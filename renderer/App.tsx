@@ -232,8 +232,8 @@ export function App() {
         if (p.kind === 'open') await engine.createTab(p.url || undefined)
         else if (p.kind === 'close') {
           if (!liveIds.has(p.tabId)) continue
-          // About to be removed: paint the tab red (light wash + blueprint
-          // grid, via the TabStrip) and hold briefly before closing, so the
+          // About to be removed: paint the tab light red (via the
+          // TabStrip) and hold briefly before closing, so the
           // removal is seen before it happens — one tab at a time.
           setTabAttention({ tabId: p.tabId, kind: 'removed', seq: ++tabAttentionSeq.current })
           await new Promise((r) => setTimeout(r, 650))

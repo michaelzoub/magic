@@ -21,7 +21,7 @@ export function checkpointVerdictInstruction(context: 'switch' | 'chat'): string
   const meaningful =
     context === 'switch'
       ? [
-          'a genuine change of context: switching workspaces and leaving behind a coherent set of tabs the user may want to resume later',
+          'any switch between two different workspaces with different goals that leaves real (non-blank) tabs behind — this is a change of context the user may want to resume, even if the tabs look similar and even if you propose no changes at all; this is the default',
           'you propose opening a set of tabs (several related tabs) to set up the new workspace for its goal',
           'substantive work was in progress in the tabs being left behind'
         ]
@@ -32,16 +32,18 @@ export function checkpointVerdictInstruction(context: 'switch' | 'chat'): string
   const notMeaningful =
     context === 'switch'
       ? [
-          'an accidental, empty, or bounce switch (there and straight back) with nothing of substance left behind',
-          'only blank/new-tab pages were open, or the same tabs remain open afterwards'
+          'an accidental or bounce switch (there and straight back) with nothing of substance left behind',
+          'only blank/new-tab pages (or no tabs at all) were left behind'
         ]
       : ['a simple question you answered from knowledge with no browser work and no tab set worth returning to', 'a failed or trivial turn']
   return [
-    'Checkpoint judgment: a checkpoint of this moment has been saved, but it is only shown to the user in Memory if you judge it meaningful. Judge based on what actually happened in this run. Meaningful:',
+    context === 'switch'
+      ? 'Checkpoint judgment: a checkpoint of this switch has been saved, but it is only shown to the user in Memory if you judge it meaningful. Judge the switch itself — how much tab work you propose does not matter. When in doubt, judge it meaningful. Meaningful:'
+      : 'Checkpoint judgment: a checkpoint of this moment has been saved, but it is only shown to the user in Memory if you judge it meaningful. Judge based on what actually happened in this run. Meaningful:',
     ...meaningful.map((m) => `- ${m}`),
     'Not meaningful:',
     ...notMeaningful.map((m) => `- ${m}`),
-    `End your reply with exactly one final line (after your summary, no markdown): ${CHECKPOINT_VERDICT_MARKER} {"meaningful":true,"reason":"one short reason"} — or "meaningful":false with the reason it is not worth showing.`
+    `Always end your reply with exactly one final line, even if you propose nothing (after your summary, no markdown): ${CHECKPOINT_VERDICT_MARKER} {"meaningful":true,"reason":"one short reason"} — or "meaningful":false with the reason it is not worth showing.`
   ].join('\n')
 }
 

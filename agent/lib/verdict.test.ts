@@ -43,8 +43,21 @@ describe('prompts ask the agent to judge the checkpoint', () => {
       incomingTabs: []
     })
     expect(prompt).toContain('Checkpoint judgment')
-    expect(prompt).toContain('switching workspaces')
+    expect(prompt).toContain('switch between two different workspaces')
     expect(prompt).toContain('CHECKPOINT_VERDICT:')
+  })
+
+  it('switch prompt treats a real context switch as meaningful even with no proposals', () => {
+    const prompt = buildWorkspaceSwitchPrompt({
+      from: { id: 'math', name: 'Deep Work on math', goal: 'Get good at math' },
+      to: { id: 'design', name: 'Design Inspo', goal: 'Browse Cosmos, X, YouTube' },
+      outgoingTabs: [{ title: 'Khan Academy', url: 'https://www.khanacademy.org/' }],
+      incomingTabs: [{ title: 'Cosmos', url: 'https://www.cosmos.so/' }]
+    })
+    expect(prompt).toContain('even if you propose no changes at all')
+    expect(prompt).toContain('When in doubt, judge it meaningful')
+    expect(prompt).toContain('Always end your reply')
+    expect(prompt).not.toContain('the same tabs remain open afterwards')
   })
 
   it('chat prompt treats asking a Magic chat question as judgeable', () => {

@@ -76,6 +76,7 @@ const overlayHost: OverlayHost = {
     ipcRenderer.on(OVERLAY_IPC.agentNotice, listener)
     return () => ipcRenderer.removeListener(OVERLAY_IPC.agentNotice, listener)
   },
+  reportNoticeHeight: (px) => ipcRenderer.send(OVERLAY_IPC.noticeHeight, px),
   onDriftNotice: (handler) => {
     const listener = (_: unknown, notice: Parameters<typeof handler>[0]) => handler(notice)
     ipcRenderer.on(OVERLAY_IPC.driftNotice, listener)

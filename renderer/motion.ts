@@ -29,13 +29,13 @@ export const motion = {
     gsap.fromTo(el, { opacity: 0, y: 2, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.12, ease: 'expo.out', clearProps: 'transform' })
   },
 
-  /** Collapse a removed tab's ghost slot away: hold the red slot ~1.35s, then collapse (~200ms). */
+  /** Collapse a removed tab's ghost slot away immediately (~200ms, no hold). */
   tabExit(el: HTMLElement) {
     if (!ok()) return
     gsap.fromTo(
       el,
       { opacity: 1, width: el.offsetWidth, flex: 'none' },
-      { opacity: 0, width: 0, paddingLeft: 0, paddingRight: 0, duration: 0.2, delay: 1.35, ease: 'power2.in' }
+      { opacity: 0, width: 0, paddingLeft: 0, paddingRight: 0, duration: 0.2, ease: 'power2.in' }
     )
   },
 

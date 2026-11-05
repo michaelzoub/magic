@@ -298,3 +298,13 @@ describe('EmbeddedAgentHost', () => {
     await host.dispose()
   })
 })
+
+describe('run timeout budgets', () => {
+  it('gives a workspace-switch run room for several model steps', async () => {
+    const { SWITCH_RUN_TIMEOUT_MS, CHAT_RUN_TIMEOUT_MS } = await import('./host')
+    // Traced healthy switch runs take 11–17s (4–6 model steps at ~2.8s
+    // each); the cap must clear that comfortably, and stay under chat's.
+    expect(SWITCH_RUN_TIMEOUT_MS).toBeGreaterThanOrEqual(45_000)
+    expect(SWITCH_RUN_TIMEOUT_MS).toBeLessThan(CHAT_RUN_TIMEOUT_MS)
+  })
+})

@@ -37,9 +37,9 @@ describe('menuPosition', () => {
 })
 
 describe('magicPopoverPosition', () => {
-  it('opens beside the icon, bottom-aligned with it, at fixed width', () => {
+  it('opens directly above the button, left-aligned with it, at fixed width', () => {
     const anchor = { x: 10, y: 760, width: 32, height: 28 }
-    expect(magicPopoverPosition(anchor, { height: 40 }, { width: 1280, height: 820 })).toEqual({ x: 50, y: 748, width: 440 })
+    expect(magicPopoverPosition(anchor, { height: 40 }, { width: 1280, height: 820 })).toEqual({ x: 10, y: 712, width: 440 })
   })
 
   it('clamps the panel inside the window', () => {

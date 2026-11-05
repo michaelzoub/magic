@@ -48,8 +48,13 @@ import { createStagedToolContext } from './staged-context'
 import { startToolBridge, type ToolBridge } from './tool-bridge'
 
 const DEFAULT_EVE_PORT = 3217
-/** Hard cap for one workspace-switch run; a run that exceeds it is cancelled. */
-export const SWITCH_RUN_TIMEOUT_MS = 15_000
+/**
+ * Hard cap for one workspace-switch run; a run that exceeds it is cancelled.
+ * Sized from Eve traces: one model step averages ~2.8s (tool calls are
+ * negligible next to it) and a healthy switch run takes 4–6 steps, i.e.
+ * 11–17s — the old 15s cap aborted runs that were progressing fine.
+ */
+export const SWITCH_RUN_TIMEOUT_MS = 60_000
 /** Hard cap for one chat turn; tool-driven tasks need longer than a switch run. */
 export const CHAT_RUN_TIMEOUT_MS = 120_000
 /** Hard cap for one goal-drift judgment; it is a single bare inference call. */

@@ -53,6 +53,7 @@ export function OverlayApp() {
           // exit animation is what unmounts it.
           onApply={(proposals) => { void host.requestAction({ type: 'agent:apply-proposals', proposals }) }}
           onDismiss={() => { void host.requestAction({ type: 'agent:dismiss-notice' }) }}
+          onHeight={(px) => host.reportNoticeHeight(px)}
         />
       )}
     </>

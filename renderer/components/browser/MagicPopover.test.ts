@@ -68,6 +68,15 @@ describe('Magic chat', () => {
     expect(src).not.toMatch(/<Plus \/>\s*New/)
   })
 
+  it('closes the chat when the turn navigates to another workspace', () => {
+    // Stream path: a completed switch_workspace tool call closes the popover.
+    expect(src).toContain("event.name === 'switch_workspace' || switchCallIds.has(event.id)")
+    expect(src).toContain("event.outcome === 'completed'")
+    expect(src).toContain('closedForSwitch = true')
+    // Live-context backstop for the shell fallback host.
+    expect(src).toContain('if (messages.length > 0) onClose?.()')
+  })
+
   it('debounces tab matches behind a typing cooldown and animates them in with GSAP', () => {
     expect(src).toContain('const MATCH_COOLDOWN_MS = 250')
     expect(src).toContain('setTimeout(() => setCooldownQuery(query), MATCH_COOLDOWN_MS)')
