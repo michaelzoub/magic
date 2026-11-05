@@ -58,23 +58,37 @@ jobs:
           codesign --verify --deep --strict -vv dist/mac-arm64/Magic.app
           codesign --verify --deep --strict -vv dist/mac/Magic.app
 
-      # MAGIC_SMOKE_TEST: load the UI, start the bundled agent server, exit 0/1.
+      # MAGIC_SMOKE_TEST: the packaged app loads its UI, starts its bundled
+      # agent server, and writes `ok` (or `fail: <why>`) to the result file.
       - name: Smoke test (macOS)
         if: runner.os == 'macOS'
-        timeout-minutes: 4
-        run: dist/mac-arm64/Magic.app/Contents/MacOS/Magic --user-data-dir="$RUNNER_TEMP/magic-smoke"
+        timeout-minutes: 5
+        run: |
+          dist/mac-arm64/Magic.app/Contents/MacOS/Magic --user-data-dir="$RUNNER_TEMP/magic-smoke" > "$RUNNER_TEMP/smoke.log" 2>&1 &
+          pid=$!
+          for i in $(seq 1 90); do [ -f "$MAGIC_SMOKE_TEST" ] && break; sleep 2; done
+          kill -9 "$pid" 2>/dev/null || true
+          pkill -9 -f 'Resources/agent/server' || true
+          grep -E '^\[(smoke|agent)\]' "$RUNNER_TEMP/smoke.log" || true
+          echo "result: $(cat "$MAGIC_SMOKE_TEST" 2>/dev/null || echo 'none')"
+          grep -qx ok "$MAGIC_SMOKE_TEST"
         env:
-          MAGIC_SMOKE_TEST: '1'
+          MAGIC_SMOKE_TEST: ${{ runner.temp }}/smoke-result.txt
           MODEL_API_KEY: smoke-test
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
-        timeout-minutes: 4
+        timeout-minutes: 5
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\win-unpacked\Magic.exe -ArgumentList "--user-data-dir=$env:RUNNER_TEMP\magic-smoke" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
+          $p = Start-Process -FilePath dist\win-unpacked\Magic.exe -ArgumentList "--user-data-dir=$env:RUNNER_TEMP\magic-smoke" -PassThru
+          for ($i = 0; $i -lt 90 -and -not (Test-Path $env:MAGIC_SMOKE_TEST); $i++) { Start-Sleep -Seconds 2 }
+          taskkill /F /T /PID $p.Id 2>$null | Out-Null
+          $result = if (Test-Path $env:MAGIC_SMOKE_TEST) { (Get-Content $env:MAGIC_SMOKE_TEST -Raw).Trim() } else { 'none' }
+          Write-Host "result: $result"
+          if ($result -ne 'ok') { throw "Smoke test failed: $result" }
+          exit 0
         env:
-          MAGIC_SMOKE_TEST: '1'
+          MAGIC_SMOKE_TEST: ${{ runner.temp }}\smoke-result.txt
           MODEL_API_KEY: smoke-test
 
       - uses: actions/upload-artifact@v4

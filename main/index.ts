@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, session } from 'electron'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC, type Bounds, type EngineCommand } from '@shared/engine'
 import { IMPORT_IPC } from '@shared/import'
@@ -367,35 +367,32 @@ app.whenReady().then(() => {
   // safeStorage (used to decrypt the saved key) needs the app to be ready.
   modelKey.load()
   createWindow()
-  if (process.env.MAGIC_SMOKE_TEST) void runSmokeTest()
+  if (process.env.MAGIC_SMOKE_TEST) void runSmokeTest(process.env.MAGIC_SMOKE_TEST)
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })
 
 /**
- * Release CI check (MAGIC_SMOKE_TEST=1, with any MODEL_API_KEY): the
- * packaged app must load its UI and start its bundled agent server. Exits
- * 0 on success, 1 on failure or after two minutes.
+ * Release CI check: MAGIC_SMOKE_TEST=<result file> (with any MODEL_API_KEY).
+ * The packaged app must load its UI and start its bundled agent server; it
+ * writes `ok` or `fail: <why>` to the file, which the workflow reads before
+ * killing the app (quitting can stall on CI runners, so exit is best-effort).
  */
-async function runSmokeTest(): Promise<void> {
-  // Kill the agent server (dispose kills the child synchronously), then
-  // exit hard: a graceful quit can stall on the fullscreen transition and
-  // on the tool bridge draining keep-alive connections.
-  const finish = (code: number) => {
+async function runSmokeTest(resultFile: string): Promise<void> {
+  const finish = (result: string) => {
+    console.log(`[smoke] ${result}`)
+    writeFileSync(resultFile, result)
     for (const host of agentHosts.values()) void host.dispose()
-    process.exit(code)
+    app.exit(result === 'ok' ? 0 : 1)
   }
-  const fail = (why: string) => (console.error(`[smoke] FAIL: ${why}`), finish(1))
-  const timer = setTimeout(() => fail('timed out'), 120_000)
+  const timer = setTimeout(() => finish('fail: timed out'), 120_000)
   const win = BrowserWindow.getAllWindows()[0]
-  if (!win) return fail('no window')
+  if (!win) return finish('fail: no window')
   if (win.webContents.isLoading()) await new Promise<void>((r) => win.webContents.once('did-finish-load', () => r()))
   const host = agentHosts.get(win.webContents.id)
-  if (!host) return fail('no agent host')
+  if (!host) return finish('fail: no agent host')
   const error = await host.warmUp()
   clearTimeout(timer)
-  if (error) return fail(`agent did not start: ${error.reason}`)
-  console.log('[smoke] OK: UI loaded and agent server is healthy')
-  finish(0)
+  finish(error ? `fail: agent did not start: ${error.reason}` : 'ok')
 }
 
 app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit())
