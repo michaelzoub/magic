@@ -1,11 +1,11 @@
 import { createServer, type Server } from 'node:http'
-import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentRuntime } from '@agent/lib/runtime'
 import type { ElectronEngine } from '../browser/electron-engine'
-import { EmbeddedAgentHost, findFreePort } from './host'
+import { EmbeddedAgentHost, findFreePort, MISSING_KEY_REASON } from './host'
 
 /** Minimal Eve stand-in: records the bridge env it was spawned with, then serves health. */
 const FAKE_EVE = `
@@ -34,6 +34,23 @@ function fakeEngine() {
     webContentsFor: () => undefined
   } as unknown as ElectronEngine
 }
+
+/** Production-server stand-in: reads PORT/HOST like the built Nitro server and records its env. */
+const FAKE_BUNDLE = `
+const { createServer } = require('node:http')
+const { writeFileSync } = require('node:fs')
+writeFileSync(process.env.MAGIC_FAKE_EVE_RECORD, JSON.stringify({
+  cwd: process.cwd(),
+  host: process.env.HOST,
+  port: Number(process.env.PORT),
+  token: process.env.MAGIC_EVE_TOKEN,
+  modelKey: process.env.MODEL_API_KEY
+}))
+createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ ok: true }))
+}).listen(Number(process.env.PORT), process.env.HOST)
+`
 
 function makeAppRoot(withEve: boolean): string {
   const root = mkdtempSync(join(tmpdir(), 'magic-host-'))
@@ -136,4 +153,43 @@ describe('EmbeddedAgentHost Eve spawning', () => {
     writeFakeEve(appRoot)
     await expect(host.workspaceSwitched(notice)).resolves.toMatchObject({ status: 'completed' })
   }, 30_000)
+
+  it('runs the bundled production server from a writable state dir with a per-launch token', async () => {
+    const root = makeAppRoot(false)
+    const serverEntry = join(root, 'agent', 'server', 'index.cjs')
+    mkdirSync(join(root, 'agent', 'server'), { recursive: true })
+    writeFileSync(serverEntry, FAKE_BUNDLE)
+    const stateDir = join(root, 'user-data', 'agent')
+    const record = join(root, 'record.json')
+    process.env.MAGIC_FAKE_EVE_RECORD = record
+    process.env.MODEL_API_KEY = 'test-key'
+    delete process.env.EVE_AGENT_URL
+    delete process.env.EVE_PORT
+
+    const host = new EmbeddedAgentHost({ appRoot: root, eveBundle: { serverEntry, stateDir }, engine: fakeEngine(), runtime, log: () => {}, assistance: { active: true, excludedSites: [], excludedWorkspaceIds: [] } })
+    hosts.push(host)
+    await expect(host.workspaceSwitched(notice)).resolves.toMatchObject({ status: 'completed' })
+
+    const spawned = JSON.parse(readFileSync(record, 'utf8')) as { cwd: string; host: string; token: string; modelKey: string }
+    expect(spawned.cwd).toBe(realpathSync(stateDir))
+    expect(spawned.host).toBe('127.0.0.1')
+    expect(spawned.token).toMatch(/^[\w-]{32}$/)
+    expect(spawned.modelKey).toBe('test-key')
+  }, 30_000)
+
+  it('skips with a Settings hint instead of spawning when no model key is set', async () => {
+    const appRoot = makeAppRoot(true)
+    const record = join(appRoot, 'record.json')
+    process.env.MAGIC_FAKE_EVE_RECORD = record
+    delete process.env.MODEL_API_KEY
+    delete process.env.AGENT_MODEL_PROVIDER
+    delete process.env.EVE_AGENT_URL
+
+    const host = new EmbeddedAgentHost({ appRoot, engine: fakeEngine(), log: () => {}, assistance: { active: true, excludedSites: [], excludedWorkspaceIds: [] } })
+    hosts.push(host)
+    await expect(host.ask('hi', { workspace: null, tabs: [] })).resolves.toMatchObject({ status: 'skipped', reason: MISSING_KEY_REASON })
+    await expect(host.assessDrift({ workspace: { id: 'w', name: 'W', goal: 'g' }, tabs: [{ id: 't', title: 'T', url: 'https://x.com' }] }))
+      .resolves.toMatchObject({ status: 'skipped', reason: MISSING_KEY_REASON })
+    expect(existsSync(record)).toBe(false)
+  })
 })

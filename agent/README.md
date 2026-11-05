@@ -82,6 +82,13 @@ tools execute against the live engine. `BrowserStore` is not bridged
 `switch_workspace` report `unavailable` in embedded mode — the switch
 has already happened by the time the agent runs.
 
+Packaged builds don't run `eve dev`: `npm run build:agent` produces the
+production server (`.output/`), which ships as `Resources/agent` and runs
+with its state under the app's user-data folder. Its routes require a
+per-launch secret the host passes as `MAGIC_EVE_TOKEN`
+(`agent/channels/eve.ts`). The model key comes from `MODEL_API_KEY`, set by
+the host from Settings when the environment has none (`main/model-key.ts`).
+
 Set `EVE_AGENT_URL` to use an externally run Eve server instead of the
 spawned one (it must be started with the bridge env itself, or browser
 tools report `unavailable`), `EVE_PORT` for the spawned port (default

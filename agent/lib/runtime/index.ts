@@ -1,4 +1,4 @@
-import { EveRuntime } from './eve-client'
+import { EveRuntime, type EveRuntimeOptions } from './eve-client'
 import type { AgentRuntime } from './types'
 
 export * from './types'
@@ -9,7 +9,7 @@ export { EveRuntime, type EveRuntimeOptions } from './eve-client'
  * `AGENT_RUNTIME=eve` (default) is currently the only implementation;
  * add a case here when a second runtime exists.
  */
-export function createAgentRuntime(opts: { baseUrl?: string } = {}): AgentRuntime {
+export function createAgentRuntime(opts: EveRuntimeOptions = {}): AgentRuntime {
   const kind = process.env.AGENT_RUNTIME ?? 'eve'
   switch (kind) {
     case 'eve':

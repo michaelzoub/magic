@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:agent": "node scripts/build-agent.mjs",
+    "dist": "npm run build && npm run build:agent && electron-builder --publish never",
+    "dist:mac": "npm run build && npm run build:agent && electron-builder --mac --publish never",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
@@ -22,6 +25,7 @@
     "@types/node": "^26.6.6",
     "autoprefixer": "^10.6.2",
     "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
@@ -36,5 +40,9 @@
     "gsap": "^3.15.0",
     "preact": "^11.1.0",
     "zod": "^4.6.7"
-  }
+  },
+  "author": {
+    "name": "Magic contributors"
+  },
+  "homepage": "https://github.com/michaelzoub/magic"
 }

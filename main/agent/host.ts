@@ -12,12 +12,19 @@
  *   `@agent/lib/switch` through the `AgentRuntime` seam. Runs are
  *   coalesced: rapid switches collapse into the latest notice.
  *
+ * Packaged builds pass `eveBundle` instead: the production Eve server
+ * built by `eve build` (see `scripts/build-agent.mjs`), run from the app's
+ * resources with its state in the user's app-data folder. Either way the
+ * server only accepts requests carrying a per-launch secret
+ * (`agent/channels/eve.ts`).
+ *
  * Everything fails soft: a missing Eve install, an unstartable server,
  * or a failed run returns `{ status: 'skipped' | 'failed', reason }`
  * and never blocks or breaks the workspace switch itself.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import {
@@ -38,6 +45,7 @@ import {
 import { buildAgentChatPrompt } from '@agent/lib/chat'
 import { buildDriftPrompt, extractDriftVerdicts } from '@agent/lib/drift'
 import { createInferenceClient, type InferenceClient } from '@agent/lib/inference'
+import { agentModelProvider } from '@agent/lib/model'
 import { buildWorkspaceSwitchPrompt } from '@agent/lib/switch'
 import { extractCheckpointVerdict } from '@agent/lib/verdict'
 import { createAgentRuntime, type AgentRuntime } from '@agent/lib/runtime'
@@ -48,6 +56,14 @@ import { createStagedToolContext } from './staged-context'
 import { startToolBridge, type ToolBridge } from './tool-bridge'
 
 const DEFAULT_EVE_PORT = 3217
+
+/** Shown in the chat when no key is set; Settings is the gear at the bottom of the sidebar. */
+export const MISSING_KEY_REASON = 'add your Meta Model API key in Settings to turn on the agent.'
+
+/** The default provider needs `MODEL_API_KEY`; the AI Gateway path authenticates on its own. */
+function missingModelKey(): boolean {
+  return agentModelProvider() === 'meta' && !process.env.MODEL_API_KEY?.trim()
+}
 /**
  * Hard cap for one workspace-switch run; a run that exceeds it is cancelled.
  * Sized from Eve traces: one model step averages ~2.8s (tool calls are
@@ -69,6 +85,12 @@ export interface EmbeddedAgentHostOptions {
   execPath?: string
   /** `none` skips starting/checking an Eve server (a runtime must be injected). */
   eveServer?: 'spawn' | 'none'
+  /**
+   * Run the prebuilt production Eve server instead of `eve dev` (packaged
+   * builds): `serverEntry` is its `server/index.mjs`, `stateDir` a writable
+   * directory for its runtime state.
+   */
+  eveBundle?: { serverEntry: string; stateDir: string }
   /** Per-run timeout; defaults to SWITCH_RUN_TIMEOUT_MS (env MAGIC_AGENT_TIMEOUT_MS). */
   timeoutMs?: number
   /** Per-chat-turn timeout; defaults to CHAT_RUN_TIMEOUT_MS (env MAGIC_AGENT_CHAT_TIMEOUT_MS). */
@@ -304,6 +326,7 @@ export class EmbeddedAgentHost {
     const { excludedSites } = this.assistance.get()
     const tabs = request.tabs.filter((t) => !isSiteExcluded(t.url, excludedSites))
     if (tabs.length === 0) return skipped('All tabs are on excluded sites')
+    if (!this.opts.inference && missingModelKey()) return skipped(MISSING_KEY_REASON)
     const inference = this.opts.inference ?? (this.inference ??= createInferenceClient())
     const timeoutMs = this.opts.driftTimeoutMs ?? Number(process.env.MAGIC_AGENT_DRIFT_TIMEOUT_MS ?? DRIFT_RUN_TIMEOUT_MS)
     try {
@@ -418,6 +441,7 @@ export class EmbeddedAgentHost {
 
   /** Lazily starts bridge + Eve server once; resolves to an error result on failure, null when ready. */
   private ensureReady(): Promise<AgentRunResult | null> {
+    if (!this.opts.runtime && missingModelKey()) return Promise.resolve({ status: 'skipped', reply: null, reason: MISSING_KEY_REASON })
     if (!this.ready) {
       const ready = this.setup().catch(async (err: unknown) => {
         // Tear down the half-started bridge/Eve so a retry starts clean.
@@ -472,14 +496,32 @@ export class EmbeddedAgentHost {
     // instead, wired to *this* host's live bridge.
     const port = await findFreePort(Number(process.env.EVE_PORT ?? DEFAULT_EVE_PORT))
     const baseUrl = `http://127.0.0.1:${port}`
-    const eveBin = join(this.opts.appRoot, 'node_modules', 'eve', 'bin', 'eve.js')
-    if (!existsSync(eveBin)) throw new Error(`Eve is not installed at ${eveBin}; run npm install`)
-    this.log(`starting Eve server on port ${port}`)
-    const child = spawn(this.opts.execPath ?? process.execPath, [eveBin, 'dev', '--no-ui', '--port', String(port)], {
-      cwd: this.opts.appRoot,
+    const token = randomBytes(24).toString('base64url')
+    const bundle = this.opts.eveBundle
+    let args: string[]
+    let cwd: string
+    if (bundle) {
+      if (!existsSync(bundle.serverEntry)) throw new Error(`Agent server is missing at ${bundle.serverEntry}`)
+      mkdirSync(bundle.stateDir, { recursive: true })
+      args = [bundle.serverEntry]
+      cwd = bundle.stateDir
+    } else {
+      const eveBin = join(this.opts.appRoot, 'node_modules', 'eve', 'bin', 'eve.js')
+      if (!existsSync(eveBin)) throw new Error(`Eve is not installed at ${eveBin}; run npm install`)
+      args = [eveBin, 'dev', '--no-ui', '--port', String(port)]
+      cwd = this.opts.appRoot
+    }
+    this.log(`starting Eve server (${bundle ? 'bundled' : 'dev'}) on port ${port}`)
+    const child = spawn(this.opts.execPath ?? process.execPath, args, {
+      cwd,
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
+        // Read by the bundled server; `eve dev` takes --port instead.
+        HOST: '127.0.0.1',
+        PORT: String(port),
+        EVE_SCHEDULES_DISABLED: '1',
+        MAGIC_EVE_TOKEN: token,
         MAGIC_TOOL_BRIDGE_URL: this.bridge.url,
         MAGIC_TOOL_BRIDGE_TOKEN: this.bridge.token
       },
@@ -500,7 +542,7 @@ export class EmbeddedAgentHost {
     })
     await this.waitHealthy(baseUrl, 90_000)
 
-    this.runtime = this.opts.runtime ?? createAgentRuntime({ baseUrl })
+    this.runtime = this.opts.runtime ?? createAgentRuntime({ baseUrl, token })
     this.log(`ready (runtime=${this.runtime.id}, eve=${baseUrl}, bridge=${this.bridge.url})`)
     return null
   }
@@ -525,6 +567,23 @@ export class EmbeddedAgentHost {
       await new Promise((r) => setTimeout(r, 500))
     }
     throw new Error(`Eve server did not become healthy within ${timeoutMs}ms`)
+  }
+
+  /**
+   * Drop the running Eve server and cached model clients so the next run
+   * starts fresh — called after the model API key changes, since both
+   * read it once at startup.
+   */
+  async restart(): Promise<void> {
+    this.log('restarting agent (model settings changed)')
+    this.child?.kill()
+    this.child = null
+    this.runtime = null
+    this.ready = null
+    this.inference = null
+    this.chatSessionId = undefined
+    await this.bridge?.close().catch(() => {})
+    this.bridge = null
   }
 
   async dispose(): Promise<void> {

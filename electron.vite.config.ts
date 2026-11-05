@@ -10,7 +10,10 @@ const shared = {
 
 export default defineConfig({
   main: {
-    build: { lib: { entry: resolve(__dirname, 'main/index.ts') } },
+    // Bundle runtime deps (ai, eve/client, zod) into out/main so the
+    // packaged app ships without node_modules; the agent server ships
+    // prebuilt (scripts/build-agent.mjs).
+    build: { lib: { entry: resolve(__dirname, 'main/index.ts') }, externalizeDeps: false },
     resolve: { alias: shared }
   },
   preload: {

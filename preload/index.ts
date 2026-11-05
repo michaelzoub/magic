@@ -5,6 +5,7 @@ import { OVERLAY_IPC, type OverlayAction, type OverlayHost, type ShellOverlay, t
 import { WORKSPACE_IPC, type WorkspacePersistence } from '@shared/workspaces'
 import { ONBOARDING_IPC, type OnboardingPersistence } from '@shared/onboarding'
 import { AGENT_IPC, type EmbeddedAgent } from '@shared/agent'
+import { MODEL_KEY_IPC, type ModelKeyBridge } from '@shared/model-key'
 
 const call =
   <C extends EngineCommand>(command: C) =>
@@ -146,7 +147,14 @@ const agent: EmbeddedAgent = {
   listAssistanceActivity: (limit) => ipcRenderer.invoke(AGENT_IPC.listAssistanceActivity, limit)
 }
 
+const modelKey: ModelKeyBridge = {
+  status: () => ipcRenderer.invoke(MODEL_KEY_IPC.status),
+  set: (key) => ipcRenderer.invoke(MODEL_KEY_IPC.set, key),
+  clear: () => ipcRenderer.invoke(MODEL_KEY_IPC.clear)
+}
+
 contextBridge.exposeInMainWorld('agent', agent)
+contextBridge.exposeInMainWorld('modelKey', modelKey)
 contextBridge.exposeInMainWorld('onboarding', onboarding)
 contextBridge.exposeInMainWorld('workspaces', workspaces)
 contextBridge.exposeInMainWorld('engine', engine)

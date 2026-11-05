@@ -9,6 +9,8 @@ import type { AgentStreamEvent, AgentRuntime, AgentTurnResult } from './types'
 export interface EveRuntimeOptions {
   /** Base URL of a running Eve app (`eve dev` / deployed). */
   baseUrl?: string
+  /** Per-launch secret the server was started with (`MAGIC_EVE_TOKEN`, see `agent/channels/eve.ts`). */
+  token?: string
 }
 
 /**
@@ -57,7 +59,8 @@ export class EveRuntime implements AgentRuntime {
 
   constructor(opts: EveRuntimeOptions = {}) {
     this.client = new Client({
-      baseUrl: opts.baseUrl ?? process.env.EVE_AGENT_URL ?? 'http://127.0.0.1:2000'
+      baseUrl: opts.baseUrl ?? process.env.EVE_AGENT_URL ?? 'http://127.0.0.1:2000',
+      ...(opts.token && { auth: { basic: { username: 'magic', password: opts.token } } })
     })
   }
 

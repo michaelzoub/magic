@@ -4,6 +4,7 @@ import type { CompletedOnboarding, UpdateProfileInput } from '@shared/onboarding
 import { Button, Chip, Dialog } from '@/components/ui'
 import { ChevronRight, Download, Pencil, Plus, Trash } from '@/components/ui/icons'
 import { PixelTotem } from './PixelTotem'
+import { ModelKeySection } from '@/features/settings/ModelKeySection'
 import { parseSitesInput, profileDetails } from './profileDetails'
 
 const field =
@@ -328,6 +329,11 @@ export function ProfileIdentityDialog({ open, completed, onClose, onImportLogins
             <p className="max-w-[420px] py-4 text-sm leading-relaxed text-white/55">
               No identity yet — finish onboarding and Magic will generate your pixel totem and save it here.
             </p>
+          )}
+          {!editing && (
+            <div className="mt-7">
+              <ModelKeySection />
+            </div>
           )}
         </div>
 

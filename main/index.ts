@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, session } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC, type Bounds, type EngineCommand } from '@shared/engine'
 import { IMPORT_IPC } from '@shared/import'
@@ -11,9 +12,17 @@ import { FloatingOverlay } from './browser/floating-overlay'
 import { WORKSPACE_IPC, type PersistedTabSet, type RecordSwitchInput } from '@shared/workspaces'
 import { ONBOARDING_IPC, type CompleteOnboardingInput, type UpdateProfileInput } from '@shared/onboarding'
 import { AGENT_IPC, DEFAULT_ASSISTANCE, type AgentChatContext, type AssistanceSettings, type DriftAssessmentRequest, type WorkspaceSwitchNotice } from '@shared/agent'
+import { MODEL_KEY_IPC } from '@shared/model-key'
 import { BackgroundAssistance, EmbeddedAgentHost } from './agent/host'
+import { ModelKeyStore } from './model-key'
 import type { WorkspaceDirectory } from '@agent/lib/tools/ports'
 import { ToolError } from '@agent/lib/tools/types'
+
+// Development: read the repo's `.env` (MODEL_API_KEY and agent overrides)
+// so main-process model calls see it too, not only the spawned `eve dev`.
+// Packaged builds get the key from Settings instead (see model-key.ts).
+const devEnvFile = join(app.getAppPath(), '.env')
+if (!app.isPackaged && existsSync(devEnvFile)) process.loadEnvFile(devEnvFile)
 
 // Rendering performance: GPU raster + zero-copy uploads keep scrolling smooth.
 app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -33,6 +42,17 @@ const agentHosts = new Map<number, EmbeddedAgentHost>()
 let workspaceDb: SqliteWorkspaceStore | null = null
 const workspaces = (): SqliteWorkspaceStore =>
   (workspaceDb ??= new SqliteWorkspaceStore(join(app.getPath('userData'), 'magic.sqlite')))
+
+const modelKey = new ModelKeyStore(() => workspaces())
+
+/**
+ * Packaged builds ship the production agent server (built by
+ * `scripts/build-agent.mjs`) as an extra resource; dev runs `eve dev`.
+ */
+const eveBundle = () =>
+  app.isPackaged
+    ? { serverEntry: join(process.resourcesPath, 'agent', 'server', 'index.mjs'), stateDir: join(app.getPath('userData'), 'agent') }
+    : undefined
 
 /**
  * The one global background-assistance state: shared by every window's
@@ -98,6 +118,8 @@ function createWindow(): void {
     minHeight: 420,
     show: false,
     title: 'Magic',
+    // Windows/Linux dev window icon (macOS uses the Dock icon above).
+    ...(!app.isPackaged && { icon: join(app.getAppPath(), 'build', 'icon.png') }),
     // Native macOS traffic lights, Chrome-style: hiddenInset titlebar,
     // buttons centred in the renderer's reserved 44px drag strip.
     titleBarStyle: 'hiddenInset',
@@ -119,6 +141,7 @@ function createWindow(): void {
     wcId,
     new EmbeddedAgentHost({
       appRoot: app.getAppPath(),
+      eveBundle: eveBundle(),
       engine,
       log: (m) => console.log(m),
       assistanceState: assistance(),
@@ -254,6 +277,20 @@ ipcMain.handle(AGENT_IPC.setAssistanceExclusions, (_e, excludedSites: string[], 
 )
 ipcMain.handle(AGENT_IPC.listAssistanceActivity, (e, limit?: number) => agentHosts.get(e.sender.id)?.listAssistanceActivity(limit) ?? [])
 
+// The key is write-only from renderers: they get status, never the key.
+const restartAgents = () => Promise.all([...agentHosts.values()].map((h) => h.restart()))
+ipcMain.handle(MODEL_KEY_IPC.status, () => modelKey.status())
+ipcMain.handle(MODEL_KEY_IPC.set, async (_e, key: string) => {
+  const status = modelKey.set(String(key ?? ''))
+  await restartAgents()
+  return status
+})
+ipcMain.handle(MODEL_KEY_IPC.clear, async () => {
+  const status = modelKey.clear()
+  await restartAgents()
+  return status
+})
+
 ipcMain.handle(ONBOARDING_IPC.complete, (_e, input: CompleteOnboardingInput) => workspaces().completeOnboarding(input))
 ipcMain.handle(ONBOARDING_IPC.load, () => workspaces().loadOnboarding())
 ipcMain.handle(ONBOARDING_IPC.updateProfile, (_e, input: UpdateProfileInput) => workspaces().updateProfile(input))
@@ -323,6 +360,11 @@ ipcMain.on(OVERLAY_IPC.actionResponse, (_e, id: string, ok: boolean, value?: unk
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'system'
+  // Dev runs as the stock Electron.app; show Magic's icon in the Dock
+  // anyway. Packaged builds get it from electron-builder (build/icon.png).
+  if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(join(app.getAppPath(), 'build', 'icon.png'))
+  // safeStorage (used to decrypt the saved key) needs the app to be ready.
+  modelKey.load()
   createWindow()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })
