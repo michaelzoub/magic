@@ -447,13 +447,16 @@ export function App() {
   // workspace switches and real tabs opening end startup permanently, so
   // the prompt can never appear mid-session (see startupRecovery.ts).
   const [startupRecovery, setStartupRecovery] = useState<'pending' | 'eligible' | 'ineligible'>('pending')
+  // Only real workspace switches can be resumed: chat-question checkpoints
+  // record the same workspace as Before and After ("switched from X to X").
+  const latestSwitch = memory.visibleCheckpoints.find((c) => c.before.title !== c.after.title) ?? null
   const startupEvaluated = useRef(false)
   useEffect(() => {
     if (!ws.ready || startupEvaluated.current) return
     startupEvaluated.current = true
     const saved = ws.getTabSet(ws.activeId)
     const hasOpenTabs = saved.tabs.some((t) => t.url) || tabs.some((t) => t.url)
-    const show = shouldShowStartupRecovery({ atStartup: true, hasOpenTabs, hasCheckpoint: memory.visibleCheckpoints.length > 0 })
+    const show = shouldShowStartupRecovery({ atStartup: true, hasOpenTabs, hasCheckpoint: latestSwitch !== null })
     setStartupRecovery(show ? 'eligible' : 'ineligible')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws.ready])
@@ -743,10 +746,9 @@ export function App() {
             blank tabs never get the prompt (startupRecovery gate above). */}
         <Viewport
           tab={activeTab}
-          resume={startupRecovery === 'eligible' ? (memory.visibleCheckpoints[0] ?? null) : null}
+          resume={startupRecovery === 'eligible' ? latestSwitch : null}
           onResume={() => {
-            const latest = memory.visibleCheckpoints[0]
-            if (latest) void navigateMemory(latest.id, 'before')
+            if (latestSwitch) void navigateMemory(latestSwitch.id, 'before')
           }}
           workspaceName={ws.all.find((w) => w.id === ws.activeId)?.name ?? null}
           switchStats={ws.switchStats}
